@@ -19,5 +19,9 @@ streamlit>=1.20.0
 plotly>=5.10.0
 matplotlib>=3.5.0
 
+# AI Integration (OpenAI)
+openai>=1.0.0
+python-dotenv>=1.0.0
+
 # Utilities
 tqdm>=4.62.0
