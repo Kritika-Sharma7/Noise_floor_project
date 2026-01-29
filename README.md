@@ -1,12 +1,33 @@
-# NOISE FLOOR 📡
+# NOISE FLOOR �️
 
-## Unsupervised Behavioral Drift Detection System
+## Defense-Grade Early Warning Intelligence System
 
-> **Detecting gradual behavioral drift hidden inside operational noise, before it becomes a visible failure or threat.**
+> **Turning background noise into preventive defense insight.**
+>
+> *This system is designed for border surveillance and high-security perimeters where threats emerge gradually.*
 
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
 [![Streamlit](https://img.shields.io/badge/Streamlit-Dashboard-FF4B4B.svg)](https://streamlit.io/)
+[![TRL-4](https://img.shields.io/badge/TRL--4%20Lab%20Validated-green.svg)](#technology-readiness)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+
+---
+
+## 🎖️ System Philosophy
+
+> **"Defense systems manage CONFIDENCE, not panic."**
+>
+> **"AI assists operators, it does NOT replace them."**
+>
+> **"Baseline adaptation is human-gated."**
+
+---
+
+## ⚡ Quick Start
+
+### Prerequisites
+- Python 3.10 or higher
+- OpenCV (for real video processing)
 
 ---
 
