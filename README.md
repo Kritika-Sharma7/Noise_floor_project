@@ -1,4 +1,4 @@
-# NOISE FLOOR �️
+# NOISE FLOOR
 
 ## Defense-Grade Early Warning Intelligence System
 
@@ -13,7 +13,7 @@
 
 ---
 
-## 🎖️ System Philosophy
+## System Philosophy
 
 > **"Defense systems manage CONFIDENCE, not panic."**
 >
@@ -23,185 +23,131 @@
 
 ---
 
-## ⚡ Quick Start
+## Quick Start
 
 ### Prerequisites
-- Python 3.10 or higher
-- OpenCV (for real video processing)
+- **Python 3.10 or higher** (tested up to Python 3.14)
+- **Git** for cloning the repository
+- **OpenCV** for real video processing (installed automatically via requirements.txt)
 
----
+### Step-by-Step Installation
 
-## 🚀 Quick Start
-
-### Prerequisites
-- Python 3.10 or higher (tested up to Python 3.14)
-- Git
-
-### Installation
-
+#### 1. Clone the Repository
 ```bash
-# 1. Clone the repository
 git clone https://github.com/Kritika-Sharma7/Noise_floor_project.git
 cd Noise_floor_project
+```
 
-# 2. Create virtual environment
+#### 2. Create Virtual Environment
+```bash
 python -m venv .venv
+```
 
-# 3. Activate virtual environment
-# Windows:
-.\.venv\Scripts\activate
-# Linux/Mac:
+#### 3. Activate Virtual Environment
+
+**Windows (PowerShell):**
+```powershell
+.\.venv\Scripts\Activate.ps1
+```
+
+**Windows (Command Prompt):**
+```cmd
+.\.venv\Scripts\activate.bat
+```
+
+**Linux/Mac:**
+```bash
 source .venv/bin/activate
+```
 
-# 4. Install dependencies
+#### 4. Install Dependencies
+```bash
 pip install -r requirements.txt
 ```
 
-### Running the Dashboard
+#### 5. (Optional) Set Up OpenAI API for AI Insights
+Create a `.env` file in the project root:
+```
+OPENAI_API_KEY=your_api_key_here
+```
 
+---
+
+## Running the Application
+
+### Dashboard (Recommended)
 ```bash
 # Make sure virtual environment is activated, then:
 streamlit run dashboard/app.py
 ```
-
 The dashboard will open at `http://localhost:8501`
 
-### Running CLI Demo
+### Intelligence-Enhanced Dashboard
+```bash
+streamlit run dashboard/app_intelligence.py
+```
 
+### CLI Demo
 ```bash
 python main.py --demo
 ```
 
 ---
 
-## 🎯 The Problem
-
-Current monitoring systems are **reactive and threshold-based**. They wait for something to be obviously wrong before alerting.
-
-**Traditional Anomaly Detection:**
-- ❌ Reacts only to sudden spikes
-- ❌ High false positive rate
-- ❌ Misses gradual changes
-- ❌ Binary alerts (normal/anomaly)
-
-**Real-world threats often manifest as GRADUAL changes:**
-- 🕵️ Insider threats: Slow behavioral shift over weeks
-- ⚙️ Equipment degradation: Progressive performance decline
-- 👥 Crowd dynamics: Tension building before incidents
-- 🏭 Infrastructure decay: Slow operational drift
-
----
-
-## 💡 Our Solution: NOISE FLOOR
-
-NOISE FLOOR learns what "normal" looks like and detects when behavior **slowly drifts away** from that baseline.
-
-**Key Innovation: Drift Detection, Not Anomaly Detection**
-
-```
-Traditional: "Is this instant abnormal?"      → Reactive, noisy
-NOISE FLOOR: "Is behavior gradually changing?" → Proactive, stable
-```
-
-### Core Capabilities
-
-| Feature | Description |
-|---------|-------------|
-| **Unsupervised Learning** | Train only on normal behavior, no labeled anomalies needed |
-| **Temporal Aggregation** | EWMA smoothing, sliding windows, trend analysis |
-| **Gray-Box Explainable** | Every feature and score has clear interpretation |
-| **Watch Zones** | Graduated alert levels (Normal → Watch → Warning → Alert) |
-| **Real-Time Dashboard** | Live monitoring with drift visualization |
-
----
-
-## 🏗️ Project Structure
+## Project Structure
 
 ```
 Noise_floor_project/
 ├── dashboard/
-│   └── app.py              # Streamlit dashboard (main UI)
+│   ├── app.py                    # Main Streamlit dashboard
+│   ├── app_intelligence.py       # Intelligence-enhanced dashboard
+│   └── app_backup.py             # Backup dashboard version
 ├── src/
 │   ├── __init__.py
-│   ├── feature_extraction.py   # Behavioral feature extraction
-│   ├── autoencoder.py          # Pure NumPy normality autoencoder
-│   ├── drift_detection.py      # EWMA + sliding window drift detection
-│   ├── watch_zones.py          # Graduated alert classification
-│   ├── baseline_comparison.py  # Compare vs traditional methods
-│   └── utils.py                # Utility functions
-├── config.py               # Configuration settings
-├── main.py                 # CLI entry point
-├── requirements.txt        # Python dependencies
+│   ├── lstm_vae.py               # LSTM-VAE temporal normality model
+│   ├── drift_intelligence.py     # Drift scoring & TDI computation
+│   ├── risk_zones.py             # Confidence-based zone classifier
+│   ├── explainability.py         # XAI attribution & explanations
+│   ├── feedback_system.py        # Human-in-the-loop feedback
+│   ├── video_features.py         # Real video optical flow extraction
+│   ├── behavioral_features.py    # 24 behavioral feature definitions
+│   ├── baseline_freeze.py        # Baseline management
+│   ├── context_augmentation.py   # Environmental context integration
+│   ├── data_ingestion.py         # Multi-source data loading
+│   ├── feature_extraction.py     # Synthetic feature extraction
+│   ├── autoencoder.py            # Pure NumPy normality autoencoder
+│   ├── drift_detection.py        # EWMA + sliding window detection
+│   ├── watch_zones.py            # Graduated alert classification
+│   ├── baseline_comparison.py    # Compare vs traditional methods
+│   └── utils.py                  # Utility functions
+├── scripts/
+│   └── generate_sample_video.py  # Generate synthetic test videos
+├── data/
+│   ├── baseline_data/            # Frozen baseline snapshots
+│   └── UCSD_Anomaly_Dataset.v1p2/  # (Download separately - see below)
+├── feedback_data/                # Operator feedback storage
+├── models/                       # Saved model weights
+├── output/                       # Generated outputs
+├── config.py                     # All configuration settings
+├── main.py                       # CLI entry point
+├── requirements.txt              # Python dependencies
 └── README.md
 ```
 
 ---
 
-## 🧠 System Architecture
+## Configuration
 
-```
-┌─────────────────────────────────────────────────────────────────────┐
-│                        NOISE FLOOR PIPELINE                         │
-├─────────────────────────────────────────────────────────────────────┤
-│                                                                     │
-│  ┌──────────────┐    ┌──────────────┐    ┌──────────────────────┐  │
-│  │ Video Input  │───▶│   Feature    │───▶│  Normality Learning  │  │
-│  │  (CCTV/IoT)  │    │  Extraction  │    │   (Autoencoder)      │  │
-│  └──────────────┘    └──────────────┘    └──────────────────────┘  │
-│                             │                        │              │
-│                             ▼                        ▼              │
-│                    ┌────────────────────────────────────┐          │
-│                    │     Behavioral Feature Vector      │          │
-│                    │  • Optical Flow Magnitude          │          │
-│                    │  • Motion Variance                 │          │
-│                    │  • Directional Entropy             │          │
-│                    │  • Temporal Gradients              │          │
-│                    └────────────────────────────────────┘          │
-│                                      │                              │
-│                                      ▼                              │
-│                    ┌────────────────────────────────────┐          │
-│                    │       Drift Detection Engine       │          │
-│                    │  • EWMA Smoothing                  │          │
-│                    │  • Sliding Window Aggregation      │          │
-│                    │  • Trend Slope Analysis            │          │
-│                    └────────────────────────────────────┘          │
-│                                      │                              │
-│                                      ▼                              │
-│                    ┌────────────────────────────────────┐          │
-│                    │        Watch Zone Classifier       │          │
-│                    │  🟢 Normal  🟡 Watch  🟠 Warning  🔴 Alert   │  │
-│                    └────────────────────────────────────┘          │
-│                                      │                              │
-│                                      ▼                              │
-│                    ┌────────────────────────────────────┐          │
-│                    │      Real-Time Dashboard           │          │
-│                    └────────────────────────────────────┘          │
-│                                                                     │
-└─────────────────────────────────────────────────────────────────────┘
-```
-
----
-
-## 📊 Dashboard Features
-
-The Streamlit dashboard provides:
-
-1. **System Status Bar** - Real-time monitoring health
-2. **Deployment Characteristics** - CPU-only, edge-deployable, CCTV-compatible
-3. **Drift Score Timeline** - Visual drift progression with zone bands
-4. **Detection Metrics** - Detection delay, false positive rate
-5. **Operational Scenarios** - Border surveillance, infrastructure, crowd intel
-6. **Method Comparison** - NOISE FLOOR vs Isolation Forest, SVM, Threshold
-7. **System Architecture** - Explainable pipeline visualization
-
----
-
-## 🔧 Configuration
-
-Edit `config.py` to adjust:
+### Data Mode
+Edit `config.py` to switch between synthetic and real video:
 
 ```python
-# Detection sensitivity
+DATA_MODE = "real_video"  # Options: "synthetic" | "real_video"
+```
+
+### Detection Sensitivity
+```python
+# In config.py
 BASELINE_FRAMES = 50        # Frames to establish baseline
 EWMA_ALPHA = 0.3            # Smoothing factor (0-1)
 TREND_WINDOW = 20           # Frames for trend analysis
@@ -214,21 +160,187 @@ WARNING_THRESHOLD = 2.5
 
 ---
 
-## 🧪 Running Tests
+## Using Real Video Data (UCSD Dataset)
 
-```bash
-# Run the demo simulation
-python main.py --demo
+### Download the Dataset
+1. Download from [UCSD Anomaly Detection Dataset](http://www.svcl.ucsd.edu/projects/anomaly/dataset.htm)
+   - Or from [Kaggle](https://www.kaggle.com/datasets/antoinelamb/ucsd-anomaly-detection-dataset)
+2. Extract to `data/UCSD_Anomaly_Dataset.v1p2/`
 
-# Expected output:
-# Detection Frame: ~115 (drift at 100)
-# Detection Delay: ~15 frames
-# False Positive Rate: 0.0%
+### Directory Structure After Download
+```
+data/
+└── UCSD_Anomaly_Dataset.v1p2/
+    ├── UCSDped1/
+    │   ├── Train/
+    │   │   ├── Train001/
+    │   │   ├── Train002/
+    │   │   └── ...
+    │   └── Test/
+    └── UCSDped2/
+        ├── Train/
+        └── Test/
 ```
 
 ---
 
-## 🤝 Contributing
+## System Architecture
+
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│                        NOISE FLOOR PIPELINE                         │
+├─────────────────────────────────────────────────────────────────────┤
+│                                                                     │
+│  ┌──────────────┐    ┌──────────────┐    ┌──────────────────────┐  │
+│  │ Video Input  │───>│   Feature    │───>│  LSTM-VAE Normality  │  │
+│  │  (CCTV/IoT)  │    │  Extraction  │    │      Learning        │  │
+│  └──────────────┘    └──────────────┘    └──────────────────────┘  │
+│                             │                        │              │
+│                             v                        v              │
+│                    ┌────────────────────────────────────┐          │
+│                    │     Behavioral Feature Vector      │          │
+│                    │  - Optical Flow Magnitude          │          │
+│                    │  - Motion Variance                 │          │
+│                    │  - Directional Entropy             │          │
+│                    │  - Temporal Gradients              │          │
+│                    └────────────────────────────────────┘          │
+│                                      │                              │
+│                                      v                              │
+│                    ┌────────────────────────────────────┐          │
+│                    │     Drift Intelligence Engine      │          │
+│                    │  - KL Divergence from baseline     │          │
+│                    │  - EWMA-smoothed deviation scores  │          │
+│                    │  - Trend persistence tracking      │          │
+│                    │  - Threat Deviation Index (TDI)    │          │
+│                    └────────────────────────────────────┘          │
+│                                      │                              │
+│                                      v                              │
+│                    ┌────────────────────────────────────┐          │
+│                    │      Risk Zone Classifier          │          │
+│                    │  NORMAL | WATCH | WARNING | CRITICAL          │
+│                    └────────────────────────────────────┘          │
+│                                      │                              │
+│                                      v                              │
+│                    ┌────────────────────────────────────┐          │
+│                    │   Explainability & Dashboard       │          │
+│                    │   Human-in-the-Loop Feedback       │          │
+│                    └────────────────────────────────────┘          │
+│                                                                     │
+└─────────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## The Problem
+
+Current monitoring systems are **reactive and threshold-based**. They wait for something to be obviously wrong before alerting.
+
+**Traditional Anomaly Detection:**
+- Reacts only to sudden spikes
+- High false positive rate
+- Misses gradual changes
+- Binary alerts (normal/anomaly)
+
+**Real-world threats often manifest as GRADUAL changes:**
+- Insider threats: Slow behavioral shift over weeks
+- Equipment degradation: Progressive performance decline
+- Crowd dynamics: Tension building before incidents
+- Infrastructure decay: Slow operational drift
+
+---
+
+## Our Solution: NOISE FLOOR
+
+NOISE FLOOR learns what "normal" looks like and detects when behavior **slowly drifts away** from that baseline.
+
+**Key Innovation: Drift Detection, Not Anomaly Detection**
+
+```
+Traditional: "Is this instant abnormal?"       -> Reactive, noisy
+NOISE FLOOR: "Is behavior gradually changing?" -> Proactive, stable
+```
+
+### Core Capabilities
+
+| Feature | Description |
+|---------|-------------|
+| **Unsupervised Learning** | Train only on normal behavior, no labeled anomalies needed |
+| **LSTM-VAE Architecture** | Temporal normality modeling with uncertainty quantification |
+| **Drift Intelligence** | EWMA smoothing, trend analysis, KL divergence tracking |
+| **Confidence-Based Zones** | Graduated risk levels (Normal -> Watch -> Warning -> Critical) |
+| **Explainable AI (XAI)** | Feature attribution explaining WHY drift is detected |
+| **Human-in-the-Loop** | Operator feedback for baseline adaptation |
+| **Real-Time Dashboard** | Live monitoring with drift visualization |
+
+---
+
+## Troubleshooting
+
+### Common Issues
+
+**1. Streamlit not found**
+```bash
+pip install streamlit
+```
+
+**2. OpenCV errors**
+```bash
+pip install opencv-python
+# Or for full version:
+pip install opencv-contrib-python
+```
+
+**3. Module not found errors**
+```bash
+# Make sure you're in the project root directory
+cd Noise_floor_project
+
+# And virtual environment is activated
+# Windows PowerShell:
+.\.venv\Scripts\Activate.ps1
+
+# Linux/Mac:
+source .venv/bin/activate
+```
+
+**4. Port 8501 already in use**
+```bash
+streamlit run dashboard/app.py --server.port 8502
+```
+
+**5. Permission denied on Windows PowerShell**
+```powershell
+# Run this once to allow script execution:
+Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
+```
+
+---
+
+## Technical Details
+
+### Why LSTM-VAE?
+- **LSTM**: Captures temporal dependencies in behavioral sequences
+- **VAE**: Provides probabilistic latent space for uncertainty quantification
+- **Unsupervised**: Learns only from NORMAL data
+
+### Why Pure NumPy (No TensorFlow)?
+- Maximum Python version compatibility (3.10-3.14)
+- Lightweight deployment (~50MB vs ~500MB)
+- CPU-only inference for edge devices
+- Simpler dependency management
+
+### 24 Behavioral Features
+The system extracts 24 features from video including:
+- Motion energy and variance
+- Optical flow statistics
+- Direction consistency and entropy
+- Scene complexity metrics
+- Velocity and acceleration patterns
+- Activity state transitions
+
+---
+
+## Contributing
 
 1. Fork the repository
 2. Create your feature branch (`git checkout -b feature/AmazingFeature`)
@@ -238,54 +350,13 @@ python main.py --demo
 
 ---
 
-## 📋 Troubleshooting
-
-### Common Issues
-
-**1. Streamlit not found**
-```bash
-pip install streamlit
-```
-
-**2. Module not found errors**
-```bash
-# Make sure you're in the project root directory
-cd Noise_floor_project
-# And virtual environment is activated
-.\.venv\Scripts\activate  # Windows
-source .venv/bin/activate  # Linux/Mac
-```
-
-**3. Port 8501 already in use**
-```bash
-streamlit run dashboard/app.py --server.port 8502
-```
-
----
-
-## 📚 Technical Details
-
-### Why Unsupervised Learning?
-- Threat events are rare and poorly labeled
-- Future attack patterns are unknown
-- System learns only from normal behavior
-- **No prior examples of attacks required**
-
-### Why Pure NumPy (No TensorFlow)?
-- Maximum Python version compatibility (3.10-3.14)
-- Lightweight deployment (~50MB vs ~500MB)
-- CPU-only inference for edge devices
-- Simpler dependency management
-
----
-
-## 📄 License
+## License
 
 This project is licensed under the MIT License.
 
 ---
 
-## 👥 Team
+## Team
 
 - Kritika Sharma
 - Contributors welcome!
@@ -293,5 +364,5 @@ This project is licensed under the MIT License.
 ---
 
 <p align="center">
-  <b>NOISE FLOOR</b> • Behavioral Drift Intelligence • Gray-box Explainable AI
+  <b>NOISE FLOOR</b> - Behavioral Drift Intelligence - Gray-box Explainable AI
 </p>
