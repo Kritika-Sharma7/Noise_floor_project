@@ -109,13 +109,38 @@ st.markdown("""
     
     /* Remove default Streamlit padding */
     .block-container {
-        padding-top: 1rem;
+        padding-top: 0.5rem;
         padding-bottom: 1rem;
         max-width: 1400px;
     }
     
-    /* Hide Streamlit branding */
-    #MainMenu, footer, header {visibility: hidden;}
+    /* Hide Streamlit branding but keep sidebar toggle */
+    #MainMenu, footer {visibility: hidden;}
+    header[data-testid="stHeader"] {
+        background: transparent !important;
+        height: auto !important;
+    }
+    
+    /* Ensure sidebar collapse button is always visible and styled */
+    [data-testid="stSidebarCollapsedControl"] {
+        visibility: visible !important;
+        display: flex !important;
+        background: var(--bg-card) !important;
+        border: 1px solid var(--border-subtle) !important;
+        border-radius: var(--radius-sm) !important;
+        color: var(--text-secondary) !important;
+        z-index: 999999 !important;
+    }
+    
+    [data-testid="stSidebarCollapsedControl"]:hover {
+        background: var(--bg-glass) !important;
+        border-color: var(--accent-primary) !important;
+        color: var(--accent-primary) !important;
+    }
+    
+    [data-testid="stSidebarCollapsedControl"] svg {
+        fill: currentColor !important;
+    }
     
     /* Custom scrollbar */
     ::-webkit-scrollbar {

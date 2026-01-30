@@ -47,8 +47,8 @@ Both modes produce identical 24-feature vectors for LSTM-VAE processing.
 
 DATA_MODE = "real_video"  # "synthetic" | "real_video"
 
-# Real video data paths - UCSD Anomaly Detection Dataset (Kaggle)
-UCSD_DATASET_PATH = r"C:\Users\AC\.cache\kagglehub\datasets\orvile\ucsd-anomaly-dataset\versions\1\UCSD_Anomaly_Dataset.v1p2"
+# Real video data paths - UCSD Anomaly Detection Dataset (Local)
+UCSD_DATASET_PATH = r"C:\Users\raghav\NoiseFloor_IPEC\Noise_floor_project\data\UCSD_Anomaly_Dataset.v1p2"
 UCSD_SUBSET = "ped1"                        # "ped1" or "ped2"
 CUSTOM_VIDEO_PATH = None                    # Path to custom surveillance video
 
