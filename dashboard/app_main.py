@@ -1,0 +1,2157 @@
+"""
+NOISE FLOOR - Defense-Grade Surveillance Intelligence Dashboard
+=================================================================
+Real-time behavioral drift detection for border security.
+
+Features:
+• UCSD Dataset Integration with Real Video Frames
+• Multi-Camera Grid View
+• LSTM-VAE Temporal Normality Learning
+• ENSEMBLE DETECTION (Isolation Forest + One-Class SVM + LOF)
+• 4-Tier Risk Zone Classification
+• Explainable AI Attribution
+• Anomaly Classification & Incident Logging
+• 3D Latent Space Visualization
+• Real-time Threat Deviation Index (TDI)
+• TDI Forecasting & Trend Prediction
+
+Run: streamlit run dashboard/app_main.py
+"""
+
+import streamlit as st
+import numpy as np
+import pandas as pd
+import cv2
+import time
+import sys
+import json
+import hashlib
+from pathlib import Path
+from datetime import datetime, timedelta
+import plotly.graph_objects as go
+from plotly.subplots import make_subplots
+import base64
+from collections import deque
+
+# Add parent directory to path
+sys.path.insert(0, str(Path(__file__).parent.parent))
+
+# Import modules
+from config import DATA_MODE, UCSD_DATASET_PATH, UCSD_SUBSET, DRONE_BIRD_DATASET_PATH
+from src.behavioral_features import BEHAVIORAL_FEATURES, create_synthetic_normal_data, create_synthetic_drift_data
+from src.lstm_vae import TemporalNormalityLSTMVAE
+from src.drift_intelligence import DriftIntelligenceEngine, DriftTrend
+from src.risk_zones import RiskZoneClassifier, RiskZone
+from src.explainability import DriftAttributor
+
+# Import ensemble and advanced AI
+try:
+    from src.ensemble_detector import EnsembleAnomalyDetector, EnsembleDecision, DetectorType
+    ENSEMBLE_AVAILABLE = True
+except ImportError:
+    ENSEMBLE_AVAILABLE = False
+
+try:
+    from src.advanced_ai import AnomalyClassifier, AnomalyCategory, ConfidenceCalibrator
+    ADVANCED_AI_AVAILABLE = True
+except ImportError:
+    ADVANCED_AI_AVAILABLE = False
+
+try:
+    from src.incident_logger import IncidentLogger, IncidentSeverity, IncidentStatus
+    INCIDENT_LOGGER_AVAILABLE = True
+except ImportError:
+    INCIDENT_LOGGER_AVAILABLE = False
+
+# Try importing video features
+try:
+    from src.video_features import RealVideoFeatureExtractor, UCSDDatasetLoader
+    VIDEO_AVAILABLE = True
+except ImportError:
+    VIDEO_AVAILABLE = False
+
+# Try importing drone-bird features
+try:
+    from src.drone_bird_features import DroneBirdFeatureExtractor, DroneBirdDatasetLoader, DRONE_BIRD_FEATURES
+    DRONE_BIRD_AVAILABLE = True
+except ImportError:
+    DRONE_BIRD_AVAILABLE = False
+    VIDEO_AVAILABLE = False
+
+# =============================================================================
+# PAGE CONFIG
+# =============================================================================
+st.set_page_config(
+    page_title="NOISE FLOOR - Defense Intelligence",
+    page_icon="🛡️",
+    layout="wide",
+    initial_sidebar_state="expanded"
+)
+
+# =============================================================================
+# DEFENSE THEME CSS
+# =============================================================================
+st.markdown("""
+<style>
+    @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Inter:wght@300;400;500;600;700&display=swap');
+    
+    :root {
+        --bg-dark: #0a0d12;
+        --bg-card: #0f1318;
+        --border: rgba(255,255,255,0.08);
+        --text-primary: #e2e8f0;
+        --text-secondary: #94a3b8;
+        --text-muted: #64748b;
+        --green: #22c55e;
+        --yellow: #eab308;
+        --orange: #f97316;
+        --red: #ef4444;
+        --blue: #3b82f6;
+        --purple: #8b5cf6;
+        --cyan: #06b6d4;
+    }
+    
+    .stApp {
+        background: linear-gradient(180deg, #0a0d12 0%, #0f1318 100%);
+    }
+    
+    .block-container {
+        padding: 1rem 2rem;
+        max-width: 1800px;
+    }
+    
+    #MainMenu, footer, header {visibility: hidden;}
+    
+    /* Header */
+    .main-header {
+        background: linear-gradient(135deg, rgba(15, 19, 24, 0.95), rgba(10, 13, 18, 0.98));
+        border: 1px solid var(--border);
+        border-radius: 16px;
+        padding: 20px 30px;
+        margin-bottom: 24px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        box-shadow: 0 4px 30px rgba(0,0,0,0.3);
+    }
+    
+    .logo-section {
+        display: flex;
+        align-items: center;
+        gap: 16px;
+    }
+    
+    .logo-icon {
+        width: 56px;
+        height: 56px;
+        background: linear-gradient(135deg, #22c55e, #16a34a);
+        border-radius: 14px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 1.8rem;
+        box-shadow: 0 0 40px rgba(34, 197, 94, 0.4);
+    }
+    
+    .logo-text h1 {
+        margin: 0;
+        font-size: 1.6rem;
+        font-weight: 700;
+        color: var(--text-primary);
+        font-family: 'Inter', sans-serif;
+    }
+    
+    .logo-text p {
+        margin: 0;
+        font-size: 0.7rem;
+        color: var(--cyan);
+        text-transform: uppercase;
+        letter-spacing: 2px;
+        font-weight: 600;
+    }
+    
+    .status-section {
+        display: flex;
+        align-items: center;
+        gap: 30px;
+    }
+    
+    .status-item {
+        text-align: center;
+    }
+    
+    .status-label {
+        font-size: 0.65rem;
+        color: var(--text-muted);
+        text-transform: uppercase;
+        letter-spacing: 1px;
+    }
+    
+    .status-value {
+        font-size: 0.9rem;
+        color: var(--text-primary);
+        font-family: 'JetBrains Mono', monospace;
+    }
+    
+    .status-badge {
+        padding: 8px 20px;
+        border-radius: 25px;
+        font-size: 0.8rem;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 1px;
+    }
+    
+    .status-badge.normal { background: rgba(34, 197, 94, 0.15); color: #22c55e; border: 1px solid rgba(34, 197, 94, 0.3); }
+    .status-badge.watch { background: rgba(234, 179, 8, 0.15); color: #eab308; border: 1px solid rgba(234, 179, 8, 0.3); }
+    .status-badge.warning { background: rgba(249, 115, 22, 0.15); color: #f97316; border: 1px solid rgba(249, 115, 22, 0.3); }
+    .status-badge.critical { background: rgba(239, 68, 68, 0.15); color: #ef4444; border: 1px solid rgba(239, 68, 68, 0.3); animation: pulse 1s infinite; }
+    
+    @keyframes pulse {
+        0%, 100% { opacity: 1; }
+        50% { opacity: 0.6; }
+    }
+    
+    /* Cards */
+    .metric-card {
+        background: var(--bg-card);
+        border: 1px solid var(--border);
+        border-radius: 16px;
+        padding: 24px;
+        text-align: center;
+        transition: all 0.3s ease;
+    }
+    
+    .metric-card:hover {
+        border-color: rgba(34, 197, 94, 0.3);
+        transform: translateY(-2px);
+    }
+    
+    .metric-label {
+        font-size: 0.7rem;
+        color: var(--text-muted);
+        text-transform: uppercase;
+        letter-spacing: 1.5px;
+        margin-bottom: 12px;
+    }
+    
+    .metric-value {
+        font-size: 3rem;
+        font-weight: 700;
+        font-family: 'JetBrains Mono', monospace;
+        line-height: 1;
+    }
+    
+    .metric-value.normal { color: #22c55e; }
+    .metric-value.watch { color: #eab308; }
+    .metric-value.warning { color: #f97316; }
+    .metric-value.critical { color: #ef4444; }
+    
+    .metric-sub {
+        font-size: 0.75rem;
+        color: var(--text-muted);
+        margin-top: 8px;
+    }
+    
+    /* Zone Card */
+    .zone-card {
+        background: var(--bg-card);
+        border: 1px solid var(--border);
+        border-radius: 16px;
+        padding: 24px;
+        text-align: center;
+    }
+    
+    .zone-icon {
+        font-size: 3rem;
+        margin-bottom: 8px;
+    }
+    
+    .zone-name {
+        font-size: 1.4rem;
+        font-weight: 700;
+        margin-bottom: 8px;
+    }
+    
+    .zone-name.normal { color: #22c55e; }
+    .zone-name.watch { color: #eab308; }
+    .zone-name.warning { color: #f97316; }
+    .zone-name.critical { color: #ef4444; }
+    
+    .zone-desc {
+        font-size: 0.8rem;
+        color: var(--text-secondary);
+    }
+    
+    /* Trend Card */
+    .trend-card {
+        background: var(--bg-card);
+        border: 1px solid var(--border);
+        border-radius: 16px;
+        padding: 24px;
+        text-align: center;
+    }
+    
+    .trend-arrow {
+        font-size: 3rem;
+        line-height: 1;
+    }
+    
+    .trend-arrow.rising { color: #ef4444; }
+    .trend-arrow.stable { color: #22c55e; }
+    .trend-arrow.falling { color: #3b82f6; }
+    
+    .trend-text {
+        font-size: 0.9rem;
+        color: var(--text-secondary);
+        margin-top: 8px;
+    }
+    
+    /* Camera Grid */
+    .camera-card {
+        background: var(--bg-card);
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        overflow: hidden;
+        transition: all 0.3s ease;
+    }
+    
+    .camera-card:hover {
+        border-color: rgba(34, 197, 94, 0.4);
+        box-shadow: 0 0 20px rgba(34, 197, 94, 0.1);
+    }
+    
+    .camera-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 10px 14px;
+        background: rgba(0,0,0,0.3);
+        border-bottom: 1px solid var(--border);
+    }
+    
+    .camera-id {
+        font-size: 0.8rem;
+        font-weight: 600;
+        color: var(--text-primary);
+        font-family: 'JetBrains Mono', monospace;
+    }
+    
+    .camera-status {
+        width: 10px;
+        height: 10px;
+        border-radius: 50%;
+        animation: blink 2s infinite;
+    }
+    
+    @keyframes blink {
+        0%, 100% { opacity: 1; }
+        50% { opacity: 0.4; }
+    }
+    
+    .camera-frame {
+        height: 140px;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        background: linear-gradient(180deg, rgba(0,0,0,0.2), rgba(0,0,0,0.4));
+    }
+    
+    .camera-frame img {
+        max-width: 100%;
+        max-height: 100%;
+        object-fit: cover;
+    }
+    
+    .camera-footer {
+        display: flex;
+        justify-content: space-between;
+        padding: 10px 14px;
+        font-size: 0.75rem;
+    }
+    
+    .camera-tdi {
+        font-weight: 600;
+        font-family: 'JetBrains Mono', monospace;
+    }
+    
+    .camera-zone {
+        text-transform: uppercase;
+        font-weight: 600;
+    }
+    
+    /* Section Header */
+    .section-header {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        margin: 28px 0 18px 0;
+        padding-bottom: 10px;
+        border-bottom: 1px solid var(--border);
+    }
+    
+    .section-icon { font-size: 1.3rem; }
+    
+    .section-title {
+        font-size: 0.85rem;
+        font-weight: 600;
+        color: var(--text-primary);
+        text-transform: uppercase;
+        letter-spacing: 2px;
+    }
+    
+    /* Chart Container */
+    .chart-container {
+        background: var(--bg-card);
+        border: 1px solid var(--border);
+        border-radius: 16px;
+        padding: 20px;
+    }
+    
+    /* Feature Bar */
+    .feature-item {
+        margin-bottom: 14px;
+    }
+    
+    .feature-header {
+        display: flex;
+        justify-content: space-between;
+        margin-bottom: 6px;
+    }
+    
+    .feature-name {
+        font-size: 0.8rem;
+        color: var(--text-secondary);
+    }
+    
+    .feature-score {
+        font-size: 0.8rem;
+        font-family: 'JetBrains Mono', monospace;
+    }
+    
+    .feature-bar-bg {
+        height: 8px;
+        background: rgba(255,255,255,0.05);
+        border-radius: 4px;
+        overflow: hidden;
+    }
+    
+    .feature-bar {
+        height: 100%;
+        border-radius: 4px;
+        transition: width 0.5s ease;
+    }
+    
+    /* Explanation Card */
+    .explanation-card {
+        background: linear-gradient(135deg, rgba(59, 130, 246, 0.1), var(--bg-card));
+        border: 1px solid rgba(59, 130, 246, 0.2);
+        border-radius: 16px;
+        padding: 20px;
+    }
+    
+    .explanation-header {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        margin-bottom: 12px;
+    }
+    
+    .explanation-title {
+        font-size: 0.75rem;
+        font-weight: 600;
+        color: var(--blue);
+        text-transform: uppercase;
+        letter-spacing: 1px;
+    }
+    
+    .explanation-text {
+        font-size: 0.9rem;
+        color: var(--text-secondary);
+        line-height: 1.6;
+    }
+    
+    /* Onset Card */
+    .onset-card {
+        background: linear-gradient(135deg, rgba(249, 115, 22, 0.1), var(--bg-card));
+        border: 1px solid rgba(249, 115, 22, 0.2);
+        border-radius: 16px;
+        padding: 20px;
+        text-align: center;
+    }
+    
+    .onset-label {
+        font-size: 0.7rem;
+        color: var(--text-muted);
+        text-transform: uppercase;
+        letter-spacing: 1px;
+        margin-bottom: 8px;
+    }
+    
+    .onset-value {
+        font-size: 1.3rem;
+        font-weight: 600;
+        color: var(--orange);
+        font-family: 'JetBrains Mono', monospace;
+    }
+    
+    /* Sidebar */
+    [data-testid="stSidebar"] {
+        background: linear-gradient(180deg, #0a0d12, #0f1318);
+        border-right: 1px solid var(--border);
+    }
+    
+    .sidebar-section {
+        background: rgba(15, 19, 24, 0.5);
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        padding: 16px;
+        margin-bottom: 16px;
+    }
+    
+    .sidebar-title {
+        font-size: 0.65rem;
+        font-weight: 700;
+        color: var(--text-muted);
+        text-transform: uppercase;
+        letter-spacing: 2px;
+        margin-bottom: 14px;
+    }
+    
+    /* Buttons */
+    .stButton > button {
+        background: linear-gradient(135deg, #22c55e, #16a34a) !important;
+        border: none !important;
+        color: #0a0d12 !important;
+        font-weight: 700 !important;
+        padding: 14px 28px !important;
+        border-radius: 12px !important;
+        font-size: 0.95rem !important;
+        transition: all 0.3s ease !important;
+        box-shadow: 0 4px 20px rgba(34, 197, 94, 0.3) !important;
+    }
+    
+    .stButton > button:hover {
+        box-shadow: 0 6px 30px rgba(34, 197, 94, 0.5) !important;
+        transform: translateY(-3px) !important;
+    }
+    
+    /* Tabs */
+    .stTabs [data-baseweb="tab-list"] {
+        gap: 8px;
+        background: transparent;
+    }
+    
+    .stTabs [data-baseweb="tab"] {
+        background: var(--bg-card);
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        color: var(--text-secondary);
+        font-weight: 500;
+    }
+    
+    .stTabs [aria-selected="true"] {
+        background: linear-gradient(135deg, rgba(34, 197, 94, 0.15), var(--bg-card)) !important;
+        border-color: rgba(34, 197, 94, 0.4) !important;
+        color: #22c55e !important;
+    }
+    
+    /* Start Screen */
+    .start-screen {
+        text-align: center;
+        padding: 80px 20px;
+    }
+    
+    .start-icon {
+        font-size: 5rem;
+        margin-bottom: 24px;
+    }
+    
+    .start-title {
+        font-size: 2rem;
+        font-weight: 700;
+        color: var(--text-primary);
+        margin-bottom: 16px;
+    }
+    
+    .start-desc {
+        font-size: 1rem;
+        color: var(--text-secondary);
+        max-width: 600px;
+        margin: 0 auto 40px auto;
+        line-height: 1.6;
+    }
+    
+    /* Info Badge */
+    .info-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        padding: 8px 16px;
+        background: rgba(6, 182, 212, 0.1);
+        border: 1px solid rgba(6, 182, 212, 0.3);
+        border-radius: 20px;
+        font-size: 0.75rem;
+        color: #06b6d4;
+        margin-bottom: 20px;
+    }
+    
+    /* Ensemble Panel */
+    .ensemble-panel {
+        background: var(--bg-card);
+        border: 1px solid var(--border);
+        border-radius: 16px;
+        padding: 20px;
+        margin-bottom: 16px;
+    }
+    
+    .ensemble-header {
+        font-size: 0.75rem;
+        font-weight: 600;
+        color: var(--purple);
+        text-transform: uppercase;
+        letter-spacing: 1px;
+        margin-bottom: 16px;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+    }
+    
+    .detector-row {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding: 10px 0;
+        border-bottom: 1px solid var(--border);
+    }
+    
+    .detector-row:last-child {
+        border-bottom: none;
+    }
+    
+    .detector-name {
+        flex: 1;
+        font-size: 0.8rem;
+        color: var(--text-secondary);
+    }
+    
+    .detector-score {
+        font-size: 0.85rem;
+        font-family: 'JetBrains Mono', monospace;
+        font-weight: 600;
+        min-width: 50px;
+        text-align: right;
+    }
+    
+    .detector-vote {
+        padding: 4px 10px;
+        border-radius: 12px;
+        font-size: 0.65rem;
+        font-weight: 600;
+        text-transform: uppercase;
+    }
+    
+    .detector-vote.normal { background: rgba(34, 197, 94, 0.15); color: #22c55e; }
+    .detector-vote.anomaly { background: rgba(239, 68, 68, 0.15); color: #ef4444; }
+    
+    .consensus-bar {
+        height: 6px;
+        background: rgba(255,255,255,0.05);
+        border-radius: 3px;
+        margin-top: 12px;
+        overflow: hidden;
+    }
+    
+    .consensus-fill {
+        height: 100%;
+        border-radius: 3px;
+        transition: width 0.5s ease;
+    }
+    
+    /* Incident Card */
+    .incident-card {
+        background: var(--bg-card);
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        padding: 16px;
+        margin-bottom: 12px;
+        transition: all 0.3s ease;
+    }
+    
+    .incident-card:hover {
+        border-color: rgba(239, 68, 68, 0.3);
+    }
+    
+    .incident-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 12px;
+    }
+    
+    .incident-id {
+        font-size: 0.75rem;
+        font-family: 'JetBrains Mono', monospace;
+        color: var(--cyan);
+    }
+    
+    .incident-time {
+        font-size: 0.7rem;
+        color: var(--text-muted);
+    }
+    
+    .incident-body {
+        display: flex;
+        gap: 16px;
+    }
+    
+    .incident-metric {
+        text-align: center;
+    }
+    
+    .incident-metric-value {
+        font-size: 1.2rem;
+        font-weight: 700;
+        font-family: 'JetBrains Mono', monospace;
+    }
+    
+    .incident-metric-label {
+        font-size: 0.65rem;
+        color: var(--text-muted);
+        text-transform: uppercase;
+    }
+    
+    .incident-category {
+        padding: 4px 12px;
+        border-radius: 15px;
+        font-size: 0.7rem;
+        font-weight: 600;
+    }
+    
+    /* Classification Badge */
+    .classification-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 8px 16px;
+        background: linear-gradient(135deg, rgba(139, 92, 246, 0.1), var(--bg-card));
+        border: 1px solid rgba(139, 92, 246, 0.3);
+        border-radius: 20px;
+        font-size: 0.8rem;
+        color: #8b5cf6;
+        margin-top: 12px;
+    }
+    
+    /* Forecast Panel */
+    .forecast-panel {
+        background: linear-gradient(135deg, rgba(6, 182, 212, 0.1), var(--bg-card));
+        border: 1px solid rgba(6, 182, 212, 0.2);
+        border-radius: 16px;
+        padding: 20px;
+    }
+    
+    .forecast-value {
+        font-size: 2rem;
+        font-weight: 700;
+        font-family: 'JetBrains Mono', monospace;
+        color: var(--cyan);
+    }
+    
+    .forecast-label {
+        font-size: 0.7rem;
+        color: var(--text-muted);
+        text-transform: uppercase;
+        letter-spacing: 1px;
+    }
+    
+    /* 3D Visualization */
+    .latent-space-container {
+        background: var(--bg-card);
+        border: 1px solid var(--border);
+        border-radius: 16px;
+        padding: 16px;
+    }
+</style>
+""", unsafe_allow_html=True)
+
+
+# =============================================================================
+# HELPER FUNCTIONS
+# =============================================================================
+def get_ucsd_dataset_path():
+    """Get correct UCSD dataset path."""
+    base_path = Path(__file__).parent.parent / "data" / "UCSD_Anomaly_Dataset.v1p2"
+    if base_path.exists():
+        return str(base_path)
+    return UCSD_DATASET_PATH
+
+
+def load_ucsd_frames(subset="ped1", split="Train", max_sequences=5, max_frames_per_seq=50):
+    """Load frames from UCSD dataset."""
+    dataset_path = Path(get_ucsd_dataset_path())
+    
+    if subset == "ped1":
+        split_path = dataset_path / "UCSDped1" / split
+    else:
+        split_path = dataset_path / "UCSDped2" / split
+    
+    if not split_path.exists():
+        return []
+    
+    frames = []
+    sequences = sorted([d for d in split_path.iterdir() if d.is_dir()])[:max_sequences]
+    
+    for seq_path in sequences:
+        tif_files = sorted(seq_path.glob("*.tif"))[:max_frames_per_seq]
+        for tif_file in tif_files:
+            frame = cv2.imread(str(tif_file), cv2.IMREAD_GRAYSCALE)
+            if frame is not None:
+                frames.append(frame)
+    
+    return frames
+
+
+def frame_to_base64(frame):
+    """Convert frame to base64 for display."""
+    if frame is None:
+        return ""
+    _, buffer = cv2.imencode('.jpg', frame)
+    return base64.b64encode(buffer).decode('utf-8')
+
+
+def extract_features_from_frames(frames, extractor):
+    """Extract behavioral features from frames."""
+    if not frames:
+        return np.array([])
+    
+    features_list = []
+    extractor.reset()
+    
+    for frame in frames:
+        features = extractor.extract_features(frame)
+        features_list.append(features)
+    
+    return np.array(features_list)
+
+
+# =============================================================================
+# SESSION STATE
+# =============================================================================
+def init_session_state():
+    """Initialize session state."""
+    defaults = {
+        'initialized': False,
+        'session_id': datetime.now().strftime("%Y%m%d_%H%M%S"),
+        'data_mode': 'synthetic',
+        'history': {
+            'tdi': [], 'zones': [], 'trends': [], 'confidences': [],
+            'timestamps': [], 'features': [], 'top_features': [], 'explanations': [],
+            'ensemble_scores': [], 'anomaly_categories': [], 'latent_means': [],
+            'forecasts': [],
+        },
+        'incidents': [],  # List of logged incidents
+        'drift_onset_frame': None,
+        'train_frames': [],
+        'test_frames': [],
+        'all_frames': [],
+        'frames_loaded': False,
+        'current_frame_idx': 0,
+        'cameras': [
+            {'id': 'CAM-ALPHA', 'zone': 'Perimeter North', 'tdi': 0, 'status': 'NORMAL', 'frame_idx': 0},
+            {'id': 'CAM-BRAVO', 'zone': 'Gate Sector', 'tdi': 0, 'status': 'NORMAL', 'frame_idx': 20},
+            {'id': 'CAM-CHARLIE', 'zone': 'Perimeter East', 'tdi': 0, 'status': 'NORMAL', 'frame_idx': 40},
+            {'id': 'CAM-DELTA', 'zone': 'Watch Tower', 'tdi': 0, 'status': 'NORMAL', 'frame_idx': 60},
+            {'id': 'CAM-ECHO', 'zone': 'Perimeter South', 'tdi': 0, 'status': 'NORMAL', 'frame_idx': 80},
+            {'id': 'CAM-FOXTROT', 'zone': 'Command Post', 'tdi': 0, 'status': 'NORMAL', 'frame_idx': 100},
+        ]
+    }
+    
+    for key, value in defaults.items():
+        if key not in st.session_state:
+            st.session_state[key] = value
+
+
+@st.cache_data
+def load_all_ucsd_frames():
+    """Load all UCSD frames for camera display."""
+    frames = []
+    dataset_path = Path(__file__).parent.parent / "data" / "UCSD_Anomaly_Dataset.v1p2"
+    
+    # Load from both Train and Test
+    for split in ["Train", "Test"]:
+        split_path = dataset_path / "UCSDped1" / split
+        if split_path.exists():
+            sequences = sorted([d for d in split_path.iterdir() if d.is_dir()])[:8]
+            for seq_path in sequences:
+                tif_files = sorted(seq_path.glob("*.tif"))[:30]
+                for tif_file in tif_files:
+                    frame = cv2.imread(str(tif_file), cv2.IMREAD_GRAYSCALE)
+                    if frame is not None:
+                        # Resize for display
+                        frame = cv2.resize(frame, (320, 240))
+                        frames.append(frame)
+    
+    return frames
+
+
+# =============================================================================
+# MODEL INITIALIZATION
+# =============================================================================
+@st.cache_resource
+def initialize_system(use_real_video=False, use_drone_bird=False):
+    """Initialize the intelligence system."""
+    
+    # Select features based on dataset
+    if use_drone_bird and DRONE_BIRD_AVAILABLE:
+        feature_names = DRONE_BIRD_FEATURES
+        n_features = len(DRONE_BIRD_FEATURES)
+    else:
+        feature_names = BEHAVIORAL_FEATURES
+        n_features = len(BEHAVIORAL_FEATURES)
+    
+    # Generate or extract training data
+    if use_drone_bird and DRONE_BIRD_AVAILABLE:
+        # Drone-Bird Dataset
+        try:
+            extractor = DroneBirdFeatureExtractor(sample_interval=2)
+            loader = DroneBirdDatasetLoader(str(DRONE_BIRD_DATASET_PATH))
+            bird_videos = loader.get_video_files("bird")[:10]
+            
+            if bird_videos:
+                train_data_list = []
+                for video_path in bird_videos[:5]:
+                    from src.drone_bird_features import extract_features_from_video
+                    features = extract_features_from_video(video_path, extractor, max_frames=100)
+                    if len(features) > 0:
+                        train_data_list.append(features)
+                
+                if train_data_list:
+                    train_data = np.vstack(train_data_list)
+                else:
+                    train_data = create_synthetic_normal_data(500, n_features)
+            else:
+                st.warning("No bird videos found. Using synthetic data.")
+                train_data = create_synthetic_normal_data(500, n_features)
+        except Exception as e:
+            st.warning(f"Drone-Bird loading failed: {e}. Using synthetic data.")
+            train_data = create_synthetic_normal_data(500, n_features)
+    
+    elif use_real_video and VIDEO_AVAILABLE:
+        # UCSD Dataset
+        try:
+            extractor = RealVideoFeatureExtractor(sample_interval=3)
+            frames = load_ucsd_frames("ped1", "Train", max_sequences=10, max_frames_per_seq=100)
+            if frames:
+                train_data = extract_features_from_frames(frames, extractor)
+                if len(train_data) < 100:
+                    train_data = create_synthetic_normal_data(500, n_features)
+            else:
+                train_data = create_synthetic_normal_data(500, n_features)
+        except Exception as e:
+            st.warning(f"Could not load real video: {e}")
+            train_data = create_synthetic_normal_data(500, n_features)
+    else:
+        train_data = create_synthetic_normal_data(500, n_features)
+    
+    # Compute baseline
+    baseline_means = np.mean(train_data, axis=0)
+    baseline_stds = np.std(train_data, axis=0) + 1e-6
+    
+    # LSTM-VAE
+    lstm_vae = TemporalNormalityLSTMVAE(
+        input_dim=n_features,
+        hidden_dim=32,
+        latent_dim=8,
+        seq_len=10,
+    )
+    
+    sequences = [train_data[i:i+10] for i in range(len(train_data) - 10)]
+    if sequences:
+        lstm_vae.train(np.array(sequences), epochs=50)
+    
+    # Ensemble Detector
+    ensemble_detector = None
+    if ENSEMBLE_AVAILABLE:
+        ensemble_detector = EnsembleAnomalyDetector(
+            contamination=0.1,
+            use_isolation_forest=True,
+            use_one_class_svm=True,
+            use_lof=True,
+        )
+        ensemble_detector.fit(train_data)
+    
+    # Anomaly Classifier
+    anomaly_classifier = None
+    if ADVANCED_AI_AVAILABLE:
+        anomaly_classifier = AnomalyClassifier()
+    
+    # Confidence Calibrator
+    confidence_calibrator = None
+    if ADVANCED_AI_AVAILABLE:
+        confidence_calibrator = ConfidenceCalibrator(temperature=1.5)
+    
+    # Incident Logger
+    incident_logger = None
+    if INCIDENT_LOGGER_AVAILABLE:
+        incident_logger = IncidentLogger(storage_path="./incident_logs")
+    
+    # Intelligence components
+    drift_engine = DriftIntelligenceEngine(
+        baseline_frames=50,
+        ewma_alpha=0.1,
+        feature_names=feature_names,
+    )
+    
+    zone_classifier = RiskZoneClassifier()
+    
+    attributor = DriftAttributor(
+        feature_names=feature_names,
+        baseline_means=baseline_means,
+        baseline_stds=baseline_stds,
+    )
+    
+    # Feature extractor for real video
+    if use_drone_bird and DRONE_BIRD_AVAILABLE:
+        feature_extractor = DroneBirdFeatureExtractor(sample_interval=2)
+    elif VIDEO_AVAILABLE:
+        feature_extractor = RealVideoFeatureExtractor(sample_interval=2)
+    else:
+        feature_extractor = None
+    
+    return (lstm_vae, drift_engine, zone_classifier, attributor, baseline_means, baseline_stds, 
+            feature_extractor, train_data, ensemble_detector, anomaly_classifier, 
+            confidence_calibrator, incident_logger, feature_names)
+
+
+# =============================================================================
+# PROCESSING FUNCTIONS
+# =============================================================================
+def process_frame(features, frame_idx, lstm_vae, drift_engine, zone_classifier, attributor, 
+                  feature_buffer, baseline_means, baseline_stds, ensemble_detector=None, 
+                  anomaly_classifier=None, confidence_calibrator=None):
+    """Process a single frame through the pipeline."""
+    feature_buffer.append(features)
+    if len(feature_buffer) > 10:
+        feature_buffer.pop(0)
+    
+    # LSTM-VAE inference
+    latent_mean = np.zeros(8)
+    latent_logvar = np.zeros(8)
+    
+    if len(feature_buffer) >= 10:
+        seq = np.array(feature_buffer[-10:]).reshape(1, 10, -1)
+        output = lstm_vae.forward(seq, training=False)
+        recon_loss = output.reconstruction_loss
+        kl_div = output.kl_divergence
+        latent_mean = output.latent_mean[0]
+        latent_logvar = output.latent_log_var[0]
+    else:
+        recon_loss = float(np.mean((features - baseline_means) ** 2))
+        kl_div = 0.0
+    
+    # Drift intelligence
+    intelligence = drift_engine.process(
+        reconstruction_loss=recon_loss,
+        kl_divergence=kl_div,
+        latent_mean=latent_mean,
+        latent_logvar=latent_logvar,
+        features=features,
+        frame_index=frame_idx,
+    )
+    
+    # Zone classification
+    zone_state = zone_classifier.classify(
+        threat_deviation_index=intelligence.threat_deviation_index,
+        z_score=intelligence.z_score,
+        trend_slope=intelligence.trend_slope,
+        trend_persistence=intelligence.trend_persistence,
+    )
+    
+    # Attribution
+    attributions = attributor.compute_feature_attributions(features, top_k=5)
+    
+    # Explanation
+    explanation = attributor.generate_explanation(
+        current_features=features,
+        threat_deviation_index=intelligence.threat_deviation_index,
+        risk_zone=zone_state.zone.name,
+        trend_direction=intelligence.drift_trend.name,
+        confidence=intelligence.confidence,
+    )
+    
+    # Ensemble Detection
+    ensemble_result = None
+    detector_scores = {}
+    if ensemble_detector is not None and ENSEMBLE_AVAILABLE:
+        lstm_score = min(recon_loss / 0.5, 1.0)  # Normalize reconstruction loss
+        ensemble_result = ensemble_detector.predict(features, lstm_vae_score=lstm_score)
+        if ensemble_result and hasattr(ensemble_result, 'votes'):
+            for vote in ensemble_result.votes:
+                detector_scores[vote.detector_type.value] = {
+                    'score': vote.anomaly_score,
+                    'is_anomaly': vote.is_anomaly,
+                    'confidence': vote.confidence
+                }
+    
+    # Anomaly Classification
+    anomaly_category = 'normal'
+    severity = 0
+    suggested_response = 'Continue routine monitoring'
+    
+    if anomaly_classifier is not None and ADVANCED_AI_AVAILABLE:
+        z_scores = (features - baseline_means) / baseline_stds
+        classification = anomaly_classifier.classify(
+            features=features,
+            feature_names=BEHAVIORAL_FEATURES,
+            z_scores=z_scores,
+            tdi=intelligence.threat_deviation_index
+        )
+        anomaly_category = classification.primary_category.value
+        severity = classification.severity
+        suggested_response = classification.suggested_response
+    
+    # TDI Forecast (simple exponential smoothing)
+    tdi_forecast = intelligence.threat_deviation_index * 1.05 if intelligence.drift_trend.name == 'INCREASING' else intelligence.threat_deviation_index * 0.95
+    tdi_forecast = max(0, min(100, tdi_forecast))
+    
+    return {
+        'tdi': intelligence.threat_deviation_index,
+        'zone': zone_state.zone,
+        'zone_name': zone_state.zone.name,
+        'trend': intelligence.drift_trend,
+        'trend_name': intelligence.drift_trend.name,
+        'confidence': intelligence.confidence,
+        'top_features': [{'name': a.feature_name, 'score': a.z_score} for a in attributions[:5]],
+        'explanation': explanation.summary if explanation else "",
+        'raw_features': features,
+        'latent_mean': latent_mean,
+        'ensemble_scores': detector_scores,
+        'anomaly_category': anomaly_category,
+        'severity': severity,
+        'suggested_response': suggested_response,
+        'tdi_forecast': tdi_forecast,
+    }
+
+
+def run_simulation(lstm_vae, drift_engine, zone_classifier, attributor, baseline_means, baseline_stds, 
+                   drift_start=100, drift_rate=0.02, use_real_video=False, feature_extractor=None,
+                   ensemble_detector=None, anomaly_classifier=None, confidence_calibrator=None):
+    """Run the full simulation."""
+    n_features = len(BEHAVIORAL_FEATURES)
+    
+    # Generate test data
+    if use_real_video and feature_extractor:
+        try:
+            # Load train frames as normal baseline
+            train_frames = load_ucsd_frames("ped1", "Train", max_sequences=5, max_frames_per_seq=50)
+            # Load test frames (contains anomalies)
+            test_frames = load_ucsd_frames("ped1", "Test", max_sequences=3, max_frames_per_seq=100)
+            
+            if train_frames and test_frames:
+                feature_extractor.reset()
+                normal_data = extract_features_from_frames(train_frames, feature_extractor)
+                feature_extractor.reset()
+                test_data = extract_features_from_frames(test_frames, feature_extractor)
+                
+                all_data = np.vstack([normal_data, test_data]) if len(normal_data) > 0 and len(test_data) > 0 else None
+                drift_start = len(normal_data)
+                
+                st.session_state.train_frames = train_frames
+                st.session_state.test_frames = test_frames
+            else:
+                all_data = None
+        except Exception as e:
+            st.warning(f"Real video error: {e}")
+            all_data = None
+    else:
+        all_data = None
+    
+    # Fallback to synthetic
+    if all_data is None or len(all_data) < 50:
+        normal_data = create_synthetic_normal_data(drift_start, n_features)
+        drift_data = create_synthetic_drift_data(200, n_features, drift_rate)
+        all_data = np.vstack([normal_data, drift_data])
+    
+    # Process
+    results = []
+    feature_buffer = []
+    drift_engine.reset()
+    zone_classifier.reset()
+    
+    drift_detected = False
+    drift_onset = None
+    incidents = []
+    
+    for i, features in enumerate(all_data):
+        result = process_frame(
+            features, i, lstm_vae, drift_engine, zone_classifier, 
+            attributor, feature_buffer, baseline_means, baseline_stds,
+            ensemble_detector, anomaly_classifier, confidence_calibrator
+        )
+        result['frame'] = i
+        results.append(result)
+        
+        if not drift_detected and result['zone'] != RiskZone.NORMAL and i >= drift_start:
+            drift_detected = True
+            drift_onset = i
+        
+        # Log incidents for WARNING and CRITICAL zones
+        if result['zone_name'] in ['WARNING', 'CRITICAL']:
+            incident = {
+                'id': f"INC-{hashlib.md5(f'{i}-{result["tdi"]}'.encode()).hexdigest()[:8].upper()}",
+                'frame': i,
+                'tdi': result['tdi'],
+                'zone': result['zone_name'],
+                'category': result.get('anomaly_category', 'unknown'),
+                'severity': result.get('severity', 0),
+                'timestamp': datetime.now().isoformat(),
+                'response': result.get('suggested_response', ''),
+            }
+            incidents.append(incident)
+    
+    return results, drift_onset, drift_start, incidents
+
+
+# =============================================================================
+# VISUALIZATION
+# =============================================================================
+def create_tdi_timeline(history, drift_start):
+    """Create TDI timeline chart."""
+    fig = make_subplots(rows=2, cols=1, row_heights=[0.85, 0.15], shared_xaxes=True, vertical_spacing=0.02)
+    
+    if not history['tdi']:
+        fig.update_layout(height=350, paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(10,13,18,0.5)')
+        return fig
+    
+    frames = list(range(len(history['tdi'])))
+    tdi = history['tdi']
+    
+    # Zone bands
+    for y0, y1, color in [(0, 25, 'rgba(34,197,94,0.1)'), (25, 50, 'rgba(234,179,8,0.1)'), 
+                          (50, 75, 'rgba(249,115,22,0.1)'), (75, 100, 'rgba(239,68,68,0.1)')]:
+        fig.add_hrect(y0=y0, y1=y1, fillcolor=color, line_width=0, row=1, col=1)
+    
+    # TDI line
+    fig.add_trace(go.Scatter(
+        x=frames, y=tdi, mode='lines', name='TDI',
+        line=dict(color='#22c55e', width=3),
+        fill='tozeroy', fillcolor='rgba(34,197,94,0.15)',
+        hovertemplate='Frame %{x}<br>TDI: %{y:.1f}<extra></extra>'
+    ), row=1, col=1)
+    
+    # Thresholds
+    for thresh, color in [(25, '#22c55e'), (50, '#eab308'), (75, '#f97316')]:
+        fig.add_hline(y=thresh, line_dash="dot", line_color=color, opacity=0.3, row=1, col=1)
+    
+    # Drift marker
+    fig.add_vline(x=drift_start, line_dash="dash", line_color="#ef4444", opacity=0.6,
+                  annotation_text="Drift Injected", annotation_position="top",
+                  annotation_font_size=10, annotation_font_color="#94a3b8", row=1, col=1)
+    
+    # Zone timeline
+    zone_colors = {'NORMAL': '#22c55e', 'WATCH': '#eab308', 'WARNING': '#f97316', 'CRITICAL': '#ef4444'}
+    colors = [zone_colors.get(z, '#64748b') for z in history['zones']]
+    fig.add_trace(go.Bar(x=frames, y=[1]*len(frames), marker_color=colors, showlegend=False), row=2, col=1)
+    
+    fig.update_layout(
+        height=350, margin=dict(l=50, r=30, t=20, b=30), showlegend=False,
+        paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(10,13,18,0.5)',
+        font=dict(color='#94a3b8', family='Inter')
+    )
+    fig.update_xaxes(gridcolor='rgba(255,255,255,0.03)')
+    fig.update_yaxes(gridcolor='rgba(255,255,255,0.03)')
+    fig.update_yaxes(title_text="TDI", range=[0, 100], row=1, col=1)
+    fig.update_yaxes(visible=False, row=2, col=1)
+    fig.update_xaxes(title_text="Frame", row=2, col=1)
+    
+    return fig
+
+
+# =============================================================================
+# MAIN APPLICATION
+# =============================================================================
+def main():
+    init_session_state()
+    
+    # Sidebar
+    with st.sidebar:
+        st.markdown('<div class="sidebar-section"><div class="sidebar-title">⚙️ Control Panel</div></div>', unsafe_allow_html=True)
+        
+        # Data Mode
+        st.markdown('<div class="sidebar-section"><div class="sidebar-title">📡 Data Source</div></div>', unsafe_allow_html=True)
+        data_mode = st.radio(
+            "Select Mode",
+            ["synthetic", "ucsd_video", "drone_bird"],
+            format_func=lambda x: {
+                "synthetic": "🔬 Synthetic Data",
+                "ucsd_video": "📹 UCSD Pedestrian",
+                "drone_bird": "🚁 Drone vs Bird"
+            }.get(x, x),
+            key="data_mode_select"
+        )
+        
+        if data_mode == "ucsd_video":
+            st.markdown("""
+            <div style="background: rgba(6,182,212,0.1); border: 1px solid rgba(6,182,212,0.3); 
+                        border-radius: 8px; padding: 10px; font-size: 0.75rem; margin: 10px 0;">
+                <strong style="color: #06b6d4;">📍 UCSD Pedestrian Dataset</strong><br>
+                <span style="color: #94a3b8;">Train: Normal walking patterns<br>
+                Test: Bikes, skaters, carts (anomalies)</span>
+            </div>
+            """, unsafe_allow_html=True)
+        
+        elif data_mode == "drone_bird":
+            st.markdown("""
+            <div style="background: rgba(139,92,246,0.1); border: 1px solid rgba(139,92,246,0.3); 
+                        border-radius: 8px; padding: 10px; font-size: 0.75rem; margin: 10px 0;">
+                <strong style="color: #8b5cf6;">🚁 Drone vs Bird Dataset</strong><br>
+                <span style="color: #94a3b8;">Train: Birds (natural movement)<br>
+                Test: Drones (mechanical movement)</span><br>
+                <span style="color: #f97316; font-size: 0.7rem;">⚡ Defense: Airspace Security</span>
+            </div>
+            """, unsafe_allow_html=True)
+        
+        st.markdown("---")
+        
+        # Parameters
+        st.markdown('<div class="sidebar-section"><div class="sidebar-title">🎚️ Parameters</div></div>', unsafe_allow_html=True)
+        drift_start = st.slider("Drift Onset Frame", 50, 200, 100, help="When drift begins")
+        drift_rate = st.slider("Drift Intensity", 0.01, 0.05, 0.02, 0.005)
+        
+        st.markdown("---")
+        
+        # Zone Thresholds
+        st.markdown('<div class="sidebar-section"><div class="sidebar-title">🎯 Zone Thresholds</div></div>', unsafe_allow_html=True)
+        watch_thresh = st.slider("Watch", 15, 35, 25)
+        warning_thresh = st.slider("Warning", 35, 60, 50)
+        critical_thresh = st.slider("Critical", 55, 85, 75)
+        
+        st.markdown("---")
+        
+        # System Info
+        st.markdown(f"""
+        <div style="font-size: 0.7rem; color: #64748b; padding: 10px;">
+            <strong>TRL-4</strong>: Lab Validated<br>
+            <strong>Mode</strong>: Decision Support<br>
+            <strong>Dataset</strong>: {'🚁 Drone-Bird' if data_mode == 'drone_bird' else '📹 UCSD' if data_mode == 'ucsd_video' else '🔬 Synthetic'}<br>
+            <strong>Philosophy</strong>: AI Assists, Not Replaces
+        </div>
+        """, unsafe_allow_html=True)
+    
+    # Initialize system
+    use_real = data_mode in ["ucsd_video", "drone_bird"]
+    use_drone_bird = data_mode == "drone_bird"
+    (lstm_vae, drift_engine, zone_classifier, attributor, baseline_means, baseline_stds, 
+     feature_extractor, train_data, ensemble_detector, anomaly_classifier, 
+     confidence_calibrator, incident_logger, feature_names) = initialize_system(use_real, use_drone_bird)
+    
+    # Current status
+    if st.session_state.history.get('tdi'):
+        latest_zone = st.session_state.history['zones'][-1]
+        latest_tdi = st.session_state.history['tdi'][-1]
+    else:
+        latest_zone = 'STANDBY'
+        latest_tdi = 0
+    
+    status_class = latest_zone.lower() if latest_zone != 'STANDBY' else 'normal'
+    
+    # Header
+    st.markdown(f"""
+    <div class="main-header">
+        <div class="logo-section">
+            <div class="logo-icon">🛡️</div>
+            <div class="logo-text">
+                <h1>NOISE FLOOR</h1>
+                <p>Defense Intelligence System</p>
+            </div>
+        </div>
+        <div class="status-section">
+            <div class="status-item">
+                <div class="status-label">Session</div>
+                <div class="status-value">{st.session_state.session_id}</div>
+            </div>
+            <div class="status-item">
+                <div class="status-label">Data Mode</div>
+                <div class="status-value">{"📹 UCSD" if use_real else "🔬 Synthetic"}</div>
+            </div>
+            <div class="status-badge {status_class}">{latest_zone}</div>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+    
+    # Tabs
+    tab1, tab2, tab3, tab4, tab5 = st.tabs(["📊 Intelligence Dashboard", "🧠 AI Ensemble", "📹 Camera Grid", "🚨 Incident Log", "📈 Analytics"])
+    
+    # =========================================================================
+    # TAB 1: INTELLIGENCE DASHBOARD
+    # =========================================================================
+    with tab1:
+        if st.session_state.history.get('tdi'):
+            idx = -1
+            tdi = st.session_state.history['tdi'][idx]
+            zone = st.session_state.history['zones'][idx]
+            trend = st.session_state.history['trends'][idx]
+            confidence = st.session_state.history['confidences'][idx]
+            
+            # TDI class
+            if tdi < 25: tdi_class = 'normal'
+            elif tdi < 50: tdi_class = 'watch'
+            elif tdi < 75: tdi_class = 'warning'
+            else: tdi_class = 'critical'
+            
+            # Zone info
+            zone_icons = {'NORMAL': '🟢', 'WATCH': '🟡', 'WARNING': '🟠', 'CRITICAL': '🔴'}
+            zone_descs = {
+                'NORMAL': 'Stable behavior within baseline',
+                'WATCH': 'Weak drift detected - monitor closely',
+                'WARNING': 'Confirmed behavioral drift',
+                'CRITICAL': 'High threat - immediate action'
+            }
+            
+            # Trend info
+            trend_arrows = {'INCREASING': '↑', 'STABLE': '→', 'DECREASING': '↓'}
+            trend_classes = {'INCREASING': 'rising', 'STABLE': 'stable', 'DECREASING': 'falling'}
+            
+            # ROW 1: Main Metrics
+            col1, col2, col3, col4 = st.columns([1.2, 1.2, 1, 1])
+            
+            with col1:
+                st.markdown(f"""
+                <div class="metric-card">
+                    <div class="metric-label">Threat Deviation Index</div>
+                    <div class="metric-value {tdi_class}">{tdi:.0f}</div>
+                    <div class="metric-sub">Scale: 0-100</div>
+                </div>
+                """, unsafe_allow_html=True)
+            
+            with col2:
+                st.markdown(f"""
+                <div class="zone-card">
+                    <div class="zone-icon">{zone_icons.get(zone, '⚪')}</div>
+                    <div class="zone-name {zone.lower()}">{zone}</div>
+                    <div class="zone-desc">{zone_descs.get(zone, '')}</div>
+                </div>
+                """, unsafe_allow_html=True)
+            
+            with col3:
+                st.markdown(f"""
+                <div class="trend-card">
+                    <div class="metric-label">Drift Trend</div>
+                    <div class="trend-arrow {trend_classes.get(trend, 'stable')}">{trend_arrows.get(trend, '→')}</div>
+                    <div class="trend-text">{trend.title()}</div>
+                </div>
+                """, unsafe_allow_html=True)
+            
+            with col4:
+                st.markdown(f"""
+                <div class="metric-card">
+                    <div class="metric-label">Confidence</div>
+                    <div class="metric-value normal">{confidence*100:.0f}%</div>
+                    <div class="metric-sub">Assessment certainty</div>
+                </div>
+                """, unsafe_allow_html=True)
+            
+            # ROW 2: Timeline
+            st.markdown('<div class="section-header"><span class="section-icon">📈</span><span class="section-title">Threat Deviation Timeline</span></div>', unsafe_allow_html=True)
+            st.markdown('<div class="chart-container">', unsafe_allow_html=True)
+            fig = create_tdi_timeline(st.session_state.history, st.session_state.get('actual_drift_start', drift_start))
+            st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False})
+            st.markdown('</div>', unsafe_allow_html=True)
+            
+            # ROW 3: Attribution & Explanation
+            col_attr, col_exp = st.columns([1, 1])
+            
+            with col_attr:
+                st.markdown('<div class="section-header"><span class="section-icon">🔍</span><span class="section-title">Feature Attribution</span></div>', unsafe_allow_html=True)
+                
+                if st.session_state.history.get('top_features') and st.session_state.history['top_features'][idx]:
+                    for feat in st.session_state.history['top_features'][idx][:5]:
+                        score = abs(feat['score'])
+                        width = min(score * 25, 100)
+                        color = '#22c55e' if score < 2 else '#eab308' if score < 3 else '#ef4444'
+                        st.markdown(f"""
+                        <div class="feature-item">
+                            <div class="feature-header">
+                                <span class="feature-name">{feat['name']}</span>
+                                <span class="feature-score" style="color: {color};">z={feat['score']:.2f}</span>
+                            </div>
+                            <div class="feature-bar-bg">
+                                <div class="feature-bar" style="width: {width}%; background: {color};"></div>
+                            </div>
+                        </div>
+                        """, unsafe_allow_html=True)
+            
+            with col_exp:
+                st.markdown('<div class="section-header"><span class="section-icon">💡</span><span class="section-title">AI Explanation</span></div>', unsafe_allow_html=True)
+                
+                explanation = st.session_state.history['explanations'][idx] if st.session_state.history.get('explanations') else ""
+                st.markdown(f"""
+                <div class="explanation-card">
+                    <div class="explanation-header">
+                        <span>🤖</span>
+                        <span class="explanation-title">System Analysis</span>
+                    </div>
+                    <div class="explanation-text">{explanation if explanation else "Analyzing behavioral patterns..."}</div>
+                </div>
+                """, unsafe_allow_html=True)
+                
+                # Drift onset
+                onset = st.session_state.drift_onset_frame
+                if onset:
+                    st.markdown(f"""
+                    <div class="onset-card" style="margin-top: 16px;">
+                        <div class="onset-label">Drift First Detected</div>
+                        <div class="onset-value">Frame {onset}</div>
+                    </div>
+                    """, unsafe_allow_html=True)
+            
+            # ROW 4: Performance Metrics
+            st.markdown('<div class="section-header"><span class="section-icon">📋</span><span class="section-title">Detection Performance</span></div>', unsafe_allow_html=True)
+            
+            m1, m2, m3, m4 = st.columns(4)
+            
+            tdi_vals = st.session_state.history['tdi']
+            zones = st.session_state.history['zones']
+            actual_drift = st.session_state.get('actual_drift_start', drift_start)
+            
+            fp = sum(1 for i in range(min(actual_drift, len(zones))) if zones[i] != 'NORMAL')
+            fp_rate = fp / actual_drift * 100 if actual_drift > 0 else 0
+            onset = st.session_state.drift_onset_frame
+            delay = onset - actual_drift if onset and onset >= actual_drift else None
+            
+            m1.metric("Detection Delay", f"{delay if delay else '—'} frames")
+            m2.metric("False Positive Rate", f"{fp_rate:.1f}%")
+            m3.metric("Peak TDI", f"{max(tdi_vals):.1f}")
+            m4.metric("Frames Analyzed", len(tdi_vals))
+            
+            # Reset
+            if st.button("🔄 Reset Session"):
+                st.session_state.history = {k: [] for k in st.session_state.history}
+                st.session_state.drift_onset_frame = None
+                st.rerun()
+        
+        else:
+            # Start screen
+            st.markdown("""
+            <div class="start-screen">
+                <div class="start-icon">🎯</div>
+                <div class="start-title">Initialize Defense Intelligence</div>
+                <div class="start-desc">
+                    NOISE FLOOR analyzes behavioral patterns to detect gradual drift before threats manifest.
+                    The system learns what "normal" looks like and alerts on subtle deviations.
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
+            
+            if use_real:
+                st.markdown("""
+                <div style="text-align: center;">
+                    <div class="info-badge">📹 Using UCSD Pedestrian Dataset - Real surveillance footage</div>
+                </div>
+                """, unsafe_allow_html=True)
+            
+            col_s1, col_btn, col_s2 = st.columns([1, 1, 1])
+            with col_btn:
+                if st.button("▶ Start Analysis", type="primary", use_container_width=True):
+                    with st.spinner("Running intelligence analysis..."):
+                        results, drift_onset, actual_drift, incidents = run_simulation(
+                            lstm_vae, drift_engine, zone_classifier, attributor,
+                            baseline_means, baseline_stds, drift_start, drift_rate,
+                            use_real, feature_extractor, ensemble_detector,
+                            anomaly_classifier, confidence_calibrator
+                        )
+                        
+                        st.session_state.history = {
+                            'tdi': [r['tdi'] for r in results],
+                            'zones': [r['zone_name'] for r in results],
+                            'trends': [r['trend_name'] for r in results],
+                            'confidences': [r['confidence'] for r in results],
+                            'timestamps': [r['frame'] for r in results],
+                            'features': [r['raw_features'] for r in results],
+                            'top_features': [r['top_features'] for r in results],
+                            'explanations': [r['explanation'] for r in results],
+                            'ensemble_scores': [r.get('ensemble_scores', {}) for r in results],
+                            'anomaly_categories': [r.get('anomaly_category', 'normal') for r in results],
+                            'latent_means': [r.get('latent_mean', np.zeros(8)) for r in results],
+                            'forecasts': [r.get('tdi_forecast', 0) for r in results],
+                        }
+                        st.session_state.drift_onset_frame = drift_onset
+                        st.session_state.actual_drift_start = actual_drift
+                        st.session_state.incidents = incidents
+                        time.sleep(0.2)
+                    st.rerun()
+    
+    # =========================================================================
+    # TAB 2: AI ENSEMBLE
+    # =========================================================================
+    with tab2:
+        st.markdown('<div class="section-header"><span class="section-icon">🧠</span><span class="section-title">Multi-Model Ensemble Detection</span></div>', unsafe_allow_html=True)
+        
+        if st.session_state.history.get('tdi'):
+            col_ens, col_lat = st.columns([1, 1])
+            
+            with col_ens:
+                # Ensemble Agreement Panel
+                st.markdown("""
+                <div class="ensemble-panel">
+                    <div class="ensemble-header">🔮 Ensemble Detector Votes</div>
+                """, unsafe_allow_html=True)
+                
+                # Get latest ensemble scores
+                ensemble_scores = st.session_state.history.get('ensemble_scores', [{}])[-1]
+                
+                detector_info = {
+                    'lstm_vae': ('LSTM-VAE', 'Primary temporal detector'),
+                    'isolation_forest': ('Isolation Forest', 'Tree-based isolation'),
+                    'one_class_svm': ('One-Class SVM', 'Boundary-based'),
+                    'lof': ('Local Outlier Factor', 'Density-based'),
+                }
+                
+                total_votes = 0
+                anomaly_votes = 0
+                
+                for det_key, det_info in detector_info.items():
+                    score_data = ensemble_scores.get(det_key, {'score': 0.5, 'is_anomaly': False})
+                    if isinstance(score_data, dict):
+                        score = score_data.get('score', 0.5)
+                        is_anomaly = score_data.get('is_anomaly', False)
+                    else:
+                        score = 0.5
+                        is_anomaly = False
+                    
+                    total_votes += 1
+                    if is_anomaly:
+                        anomaly_votes += 1
+                    
+                    vote_class = 'anomaly' if is_anomaly else 'normal'
+                    vote_text = 'ANOMALY' if is_anomaly else 'NORMAL'
+                    score_color = '#ef4444' if score > 0.6 else '#eab308' if score > 0.4 else '#22c55e'
+                    
+                    st.markdown(f"""
+                    <div class="detector-row">
+                        <div class="detector-name">{det_info[0]}<br><span style="font-size: 0.65rem; color: #64748b;">{det_info[1]}</span></div>
+                        <div class="detector-score" style="color: {score_color};">{score:.2f}</div>
+                        <div class="detector-vote {vote_class}">{vote_text}</div>
+                    </div>
+                    """, unsafe_allow_html=True)
+                
+                # Consensus bar
+                agreement = anomaly_votes / max(total_votes, 1)
+                consensus_color = '#ef4444' if agreement > 0.5 else '#22c55e'
+                
+                st.markdown(f"""
+                <div style="margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--border);">
+                    <div style="display: flex; justify-content: space-between; font-size: 0.75rem; margin-bottom: 8px;">
+                        <span style="color: #94a3b8;">Consensus Agreement</span>
+                        <span style="color: {consensus_color}; font-weight: 600;">{agreement*100:.0f}% Anomaly</span>
+                    </div>
+                    <div class="consensus-bar">
+                        <div class="consensus-fill" style="width: {agreement*100}%; background: {consensus_color};"></div>
+                    </div>
+                </div>
+                </div>
+                """, unsafe_allow_html=True)
+                
+                # Anomaly Classification
+                st.markdown('<div class="section-header"><span class="section-icon">🏷️</span><span class="section-title">Anomaly Classification</span></div>', unsafe_allow_html=True)
+                
+                categories = st.session_state.history.get('anomaly_categories', ['normal'])
+                latest_category = categories[-1] if categories else 'normal'
+                
+                category_icons = {
+                    'normal': '✅', 'loitering': '🧍', 'intrusion': '⚠️', 
+                    'crowd_formation': '👥', 'erratic_movement': '🌀',
+                    'coordinated': '🎯', 'speed_anomaly': '⚡', 
+                    'direction_anomaly': '↩️', 'unknown': '❓'
+                }
+                
+                category_colors = {
+                    'normal': '#22c55e', 'loitering': '#eab308', 'intrusion': '#ef4444',
+                    'crowd_formation': '#f97316', 'erratic_movement': '#8b5cf6',
+                    'coordinated': '#ef4444', 'speed_anomaly': '#06b6d4',
+                    'direction_anomaly': '#ec4899', 'unknown': '#64748b'
+                }
+                
+                st.markdown(f"""
+                <div class="classification-badge" style="border-color: {category_colors.get(latest_category, '#64748b')}30; color: {category_colors.get(latest_category, '#64748b')};">
+                    <span>{category_icons.get(latest_category, '❓')}</span>
+                    <span>{latest_category.replace('_', ' ').title()}</span>
+                </div>
+                """, unsafe_allow_html=True)
+                
+                # Category distribution
+                if categories:
+                    cat_counts = {}
+                    for c in categories:
+                        cat_counts[c] = cat_counts.get(c, 0) + 1
+                    
+                    sorted_cats = sorted(cat_counts.items(), key=lambda x: x[1], reverse=True)[:5]
+                    
+                    st.markdown("<br>", unsafe_allow_html=True)
+                    for cat, count in sorted_cats:
+                        pct = count / len(categories) * 100
+                        color = category_colors.get(cat, '#64748b')
+                        st.markdown(f"""
+                        <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">
+                            <span style="font-size: 0.8rem;">{category_icons.get(cat, '❓')}</span>
+                            <span style="font-size: 0.75rem; color: #94a3b8; flex: 1;">{cat.replace('_', ' ').title()}</span>
+                            <span style="font-size: 0.75rem; color: {color}; font-weight: 600;">{pct:.0f}%</span>
+                        </div>
+                        """, unsafe_allow_html=True)
+            
+            with col_lat:
+                # 3D Latent Space Visualization
+                st.markdown('<div class="section-header"><span class="section-icon">🌌</span><span class="section-title">3D Latent Space Trajectory</span></div>', unsafe_allow_html=True)
+                
+                latent_means = st.session_state.history.get('latent_means', [])
+                zones = st.session_state.history.get('zones', [])
+                
+                if latent_means and len(latent_means) > 10:
+                    # Extract first 3 dimensions for 3D plot
+                    latent_array = np.array([lm if isinstance(lm, np.ndarray) else np.zeros(8) for lm in latent_means])
+                    
+                    if latent_array.shape[1] >= 3:
+                        x = latent_array[:, 0]
+                        y = latent_array[:, 1]
+                        z = latent_array[:, 2]
+                        
+                        zone_colors = {'NORMAL': '#22c55e', 'WATCH': '#eab308', 'WARNING': '#f97316', 'CRITICAL': '#ef4444'}
+                        colors = [zone_colors.get(zn, '#64748b') for zn in zones]
+                        
+                        fig = go.Figure(data=[go.Scatter3d(
+                            x=x, y=y, z=z,
+                            mode='lines+markers',
+                            marker=dict(
+                                size=4,
+                                color=list(range(len(x))),
+                                colorscale='Viridis',
+                                opacity=0.8
+                            ),
+                            line=dict(
+                                color='rgba(34, 197, 94, 0.3)',
+                                width=2
+                            ),
+                            hovertemplate='Frame %{customdata}<br>z1: %{x:.2f}<br>z2: %{y:.2f}<br>z3: %{z:.2f}<extra></extra>',
+                            customdata=list(range(len(x)))
+                        )])
+                        
+                        fig.update_layout(
+                            height=400,
+                            margin=dict(l=0, r=0, t=20, b=0),
+                            scene=dict(
+                                xaxis=dict(title='z₁', backgroundcolor='rgba(10,13,18,0.5)', gridcolor='rgba(255,255,255,0.05)'),
+                                yaxis=dict(title='z₂', backgroundcolor='rgba(10,13,18,0.5)', gridcolor='rgba(255,255,255,0.05)'),
+                                zaxis=dict(title='z₃', backgroundcolor='rgba(10,13,18,0.5)', gridcolor='rgba(255,255,255,0.05)'),
+                                bgcolor='rgba(10,13,18,0.5)'
+                            ),
+                            paper_bgcolor='rgba(0,0,0,0)',
+                            font=dict(color='#94a3b8', size=10)
+                        )
+                        
+                        st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False})
+                    else:
+                        st.info("Insufficient latent dimensions for 3D visualization")
+                else:
+                    st.info("Run analysis to see latent space trajectory")
+                
+                # TDI Forecast
+                st.markdown('<div class="section-header"><span class="section-icon">🔮</span><span class="section-title">TDI Forecast</span></div>', unsafe_allow_html=True)
+                
+                forecasts = st.session_state.history.get('forecasts', [])
+                if forecasts:
+                    latest_forecast = forecasts[-1]
+                    current_tdi = st.session_state.history['tdi'][-1]
+                    
+                    forecast_trend = '↑' if latest_forecast > current_tdi else '↓' if latest_forecast < current_tdi else '→'
+                    forecast_color = '#ef4444' if latest_forecast > 50 else '#eab308' if latest_forecast > 25 else '#22c55e'
+                    
+                    st.markdown(f"""
+                    <div class="forecast-panel">
+                        <div style="display: flex; justify-content: space-between; align-items: center;">
+                            <div>
+                                <div class="forecast-label">Predicted Next TDI</div>
+                                <div class="forecast-value" style="color: {forecast_color};">{latest_forecast:.1f} {forecast_trend}</div>
+                            </div>
+                            <div style="text-align: right;">
+                                <div class="forecast-label">Current</div>
+                                <div style="font-size: 1.5rem; color: #94a3b8;">{current_tdi:.1f}</div>
+                            </div>
+                        </div>
+                    </div>
+                    """, unsafe_allow_html=True)
+                else:
+                    st.info("Run analysis to see TDI forecast")
+        
+        else:
+            st.info("▶ Run analysis from the Intelligence Dashboard tab to see ensemble detection results")
+    
+    # =========================================================================
+    # TAB 3: CAMERA GRID
+    # =========================================================================
+    with tab3:
+        st.markdown('<div class="section-header"><span class="section-icon">📹</span><span class="section-title">Multi-Camera Surveillance Grid</span></div>', unsafe_allow_html=True)
+        
+        # Only load UCSD frames if in real video mode
+        if use_real:
+            all_frames = load_all_ucsd_frames()
+            if all_frames:
+                st.markdown(f"""
+                <div class="info-badge" style="margin-bottom: 16px;">
+                    📹 Live Feed: {len(all_frames)} frames from UCSD Pedestrian Dataset
+                </div>
+                """, unsafe_allow_html=True)
+        else:
+            all_frames = []
+            st.markdown("""
+            <div class="info-badge" style="margin-bottom: 16px; background: rgba(139, 92, 246, 0.1); border-color: rgba(139, 92, 246, 0.3); color: #8b5cf6;">
+                🔬 Synthetic Mode: Simulated camera feeds (switch to UCSD Real Video for live frames)
+            </div>
+            """, unsafe_allow_html=True)
+        
+        # Update camera TDIs based on main analysis
+        if st.session_state.history.get('tdi'):
+            main_tdi = st.session_state.history['tdi'][-1]
+            for cam in st.session_state.cameras:
+                variance = np.random.uniform(-15, 20)
+                cam['tdi'] = max(0, min(100, main_tdi + variance))
+                if cam['tdi'] < 25: cam['status'] = 'NORMAL'
+                elif cam['tdi'] < 50: cam['status'] = 'WATCH'
+                elif cam['tdi'] < 75: cam['status'] = 'WARNING'
+                else: cam['status'] = 'CRITICAL'
+        
+        # Display cameras
+        cols = st.columns(3)
+        zone_colors = {'NORMAL': '#22c55e', 'WATCH': '#eab308', 'WARNING': '#f97316', 'CRITICAL': '#ef4444'}
+        
+        for i, cam in enumerate(st.session_state.cameras):
+            with cols[i % 3]:
+                color = zone_colors.get(cam['status'], '#64748b')
+                
+                # Show real frame only in real video mode
+                if use_real and all_frames:
+                    # Each camera shows different frames
+                    frame_offset = cam.get('frame_idx', i * 30) % len(all_frames)
+                    frame = all_frames[frame_offset]
+                    frame_b64 = frame_to_base64(frame)
+                    if frame_b64:
+                        frame_html = f'<img src="data:image/jpeg;base64,{frame_b64}" style="width: 100%; height: 140px; object-fit: cover; filter: brightness(0.9);">'
+                    else:
+                        frame_html = '<span style="color: #64748b; font-size: 2.5rem;">📷</span>'
+                else:
+                    # Synthetic mode - show simulated camera icon with status color
+                    frame_html = f'''
+                    <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%;">
+                        <span style="font-size: 2.5rem; opacity: 0.6;">📹</span>
+                        <span style="font-size: 0.7rem; color: {color}; margin-top: 8px;">SIMULATED</span>
+                    </div>
+                    '''
+                
+                st.markdown(f"""
+                <div class="camera-card">
+                    <div class="camera-header">
+                        <span class="camera-id">{cam['id']}</span>
+                        <div class="camera-status" style="background: {color};"></div>
+                    </div>
+                    <div class="camera-frame" style="height: 140px; overflow: hidden;">
+                        {frame_html}
+                    </div>
+                    <div class="camera-footer">
+                        <span class="camera-tdi" style="color: {color};">TDI: {cam['tdi']:.0f}</span>
+                        <span class="camera-zone" style="color: {color};">{cam['status']}</span>
+                    </div>
+                </div>
+                <div style="text-align: center; font-size: 0.7rem; color: #64748b; margin-top: 4px; margin-bottom: 16px;">
+                    {cam['zone']}
+                </div>
+                """, unsafe_allow_html=True)
+    
+    # =========================================================================
+    # TAB 4: INCIDENT LOG
+    # =========================================================================
+    with tab4:
+        st.markdown('<div class="section-header"><span class="section-icon">🚨</span><span class="section-title">Incident Log & Alert History</span></div>', unsafe_allow_html=True)
+        
+        incidents = st.session_state.get('incidents', [])
+        
+        if incidents:
+            # Summary stats
+            col_s1, col_s2, col_s3, col_s4 = st.columns(4)
+            
+            with col_s1:
+                st.markdown(f"""
+                <div class="metric-card">
+                    <div class="metric-value warning">{len(incidents)}</div>
+                    <div class="metric-label">Total Incidents</div>
+                </div>
+                """, unsafe_allow_html=True)
+            
+            with col_s2:
+                critical_count = sum(1 for i in incidents if i.get('zone') == 'CRITICAL')
+                st.markdown(f"""
+                <div class="metric-card">
+                    <div class="metric-value critical">{critical_count}</div>
+                    <div class="metric-label">Critical Alerts</div>
+                </div>
+                """, unsafe_allow_html=True)
+            
+            with col_s3:
+                categories = [i.get('category', 'unknown') for i in incidents]
+                most_common = max(set(categories), key=categories.count) if categories else 'N/A'
+                st.markdown(f"""
+                <div class="metric-card">
+                    <div class="metric-value" style="font-size: 1.2rem;">{most_common.replace('_', ' ').title()}</div>
+                    <div class="metric-label">Most Common Type</div>
+                </div>
+                """, unsafe_allow_html=True)
+            
+            with col_s4:
+                avg_tdi = np.mean([i.get('tdi', 0) for i in incidents])
+                st.markdown(f"""
+                <div class="metric-card">
+                    <div class="metric-value warning">{avg_tdi:.1f}</div>
+                    <div class="metric-label">Avg Incident TDI</div>
+                </div>
+                """, unsafe_allow_html=True)
+            
+            st.markdown("<br>", unsafe_allow_html=True)
+            
+            # Incident Timeline Chart
+            st.markdown('<div class="section-header"><span class="section-icon">📈</span><span class="section-title">Incident Timeline</span></div>', unsafe_allow_html=True)
+            
+            fig = go.Figure()
+            
+            frames = [i.get('frame', 0) for i in incidents]
+            tdis = [i.get('tdi', 0) for i in incidents]
+            zones = [i.get('zone', 'WARNING') for i in incidents]
+            
+            zone_colors = {'WARNING': '#f97316', 'CRITICAL': '#ef4444'}
+            colors = [zone_colors.get(z, '#f97316') for z in zones]
+            
+            fig.add_trace(go.Scatter(
+                x=frames, y=tdis,
+                mode='markers',
+                marker=dict(size=12, color=colors, line=dict(color='white', width=2)),
+                hovertemplate='Frame: %{x}<br>TDI: %{y:.1f}<extra></extra>'
+            ))
+            
+            fig.update_layout(
+                height=200,
+                margin=dict(l=40, r=20, t=20, b=40),
+                paper_bgcolor='rgba(0,0,0,0)',
+                plot_bgcolor='rgba(10,13,18,0.5)',
+                font=dict(color='#94a3b8'),
+                xaxis=dict(title='Frame', gridcolor='rgba(255,255,255,0.03)'),
+                yaxis=dict(title='TDI', gridcolor='rgba(255,255,255,0.03)', range=[0, 100])
+            )
+            
+            st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False})
+            
+            # Incident List
+            st.markdown('<div class="section-header"><span class="section-icon">📋</span><span class="section-title">Incident Details</span></div>', unsafe_allow_html=True)
+            
+            for incident in reversed(incidents[-20:]):  # Show last 20
+                zone = incident.get('zone', 'WARNING')
+                zone_color = '#f97316' if zone == 'WARNING' else '#ef4444'
+                category = incident.get('category', 'unknown')
+                
+                category_icons = {
+                    'normal': '✅', 'loitering': '🧍', 'intrusion': '⚠️', 
+                    'crowd_formation': '👥', 'erratic_movement': '🌀',
+                    'coordinated': '🎯', 'speed_anomaly': '⚡', 
+                    'direction_anomaly': '↩️', 'unknown': '❓'
+                }
+                
+                st.markdown(f"""
+                <div class="incident-card" style="border-left: 3px solid {zone_color};">
+                    <div class="incident-header">
+                        <span class="incident-id">{incident.get('id', 'N/A')}</span>
+                        <span class="incident-time">Frame {incident.get('frame', 0)}</span>
+                    </div>
+                    <div class="incident-body">
+                        <div class="incident-metric">
+                            <div class="incident-metric-value" style="color: {zone_color};">{incident.get('tdi', 0):.0f}</div>
+                            <div class="incident-metric-label">TDI</div>
+                        </div>
+                        <div class="incident-metric">
+                            <div class="incident-metric-value" style="color: {zone_color};">{zone}</div>
+                            <div class="incident-metric-label">Zone</div>
+                        </div>
+                        <div class="incident-metric">
+                            <span class="incident-category" style="background: {zone_color}20; color: {zone_color};">
+                                {category_icons.get(category, '❓')} {category.replace('_', ' ').title()}
+                            </span>
+                        </div>
+                    </div>
+                </div>
+                """, unsafe_allow_html=True)
+            
+            # Export incidents
+            st.markdown("<br>", unsafe_allow_html=True)
+            col_exp1, col_exp2, _ = st.columns([1, 1, 2])
+            
+            with col_exp1:
+                incident_df = pd.DataFrame(incidents)
+                csv_data = incident_df.to_csv(index=False)
+                st.download_button(
+                    label="📥 Export Incidents CSV",
+                    data=csv_data,
+                    file_name=f"incidents_{st.session_state.session_id}.csv",
+                    mime="text/csv",
+                    use_container_width=True
+                )
+            
+            with col_exp2:
+                json_data = json.dumps(incidents, indent=2)
+                st.download_button(
+                    label="📥 Export Incidents JSON",
+                    data=json_data,
+                    file_name=f"incidents_{st.session_state.session_id}.json",
+                    mime="application/json",
+                    use_container_width=True
+                )
+        else:
+            st.markdown("""
+            <div style="text-align: center; padding: 60px 20px;">
+                <div style="font-size: 4rem; margin-bottom: 20px;">✅</div>
+                <div style="font-size: 1.2rem; color: #22c55e; margin-bottom: 10px;">No Incidents Detected</div>
+                <div style="font-size: 0.85rem; color: #94a3b8;">All behavioral patterns within normal parameters</div>
+            </div>
+            """, unsafe_allow_html=True)
+    
+    # =========================================================================
+    # TAB 5: ANALYTICS
+    # =========================================================================
+    with tab5:
+        st.markdown('<div class="section-header"><span class="section-icon">📊</span><span class="section-title">Session Analytics</span></div>', unsafe_allow_html=True)
+        
+        if st.session_state.history.get('tdi'):
+            tdi_vals = st.session_state.history['tdi']
+            zones = st.session_state.history['zones']
+            
+            # Export Section
+            st.markdown('<div class="section-header"><span class="section-icon">📥</span><span class="section-title">Export Analysis Data</span></div>', unsafe_allow_html=True)
+            
+            exp_col1, exp_col2, exp_col3 = st.columns([1, 1, 2])
+            
+            with exp_col1:
+                # Prepare CSV data
+                df = pd.DataFrame({
+                    'Frame': range(len(tdi_vals)),
+                    'TDI': tdi_vals,
+                    'Zone': zones,
+                    'Trend': st.session_state.history.get('trends', []),
+                    'Confidence': st.session_state.history.get('confidences', []),
+                })
+                csv_data = df.to_csv(index=False)
+                st.download_button(
+                    label="📥 Download CSV",
+                    data=csv_data,
+                    file_name=f"noise_floor_analysis_{st.session_state.session_id}.csv",
+                    mime="text/csv",
+                    use_container_width=True
+                )
+            
+            with exp_col2:
+                # Prepare JSON data
+                export_data = {
+                    'session_id': st.session_state.session_id,
+                    'timestamp': datetime.now().isoformat(),
+                    'data_mode': 'real_video' if use_real else 'synthetic',
+                    'frames_analyzed': len(tdi_vals),
+                    'drift_onset_frame': st.session_state.drift_onset_frame,
+                    'peak_tdi': float(max(tdi_vals)),
+                    'avg_tdi': float(np.mean(tdi_vals)),
+                    'history': {
+                        'tdi': [float(x) for x in tdi_vals],
+                        'zones': zones,
+                        'trends': st.session_state.history.get('trends', []),
+                    }
+                }
+                json_data = json.dumps(export_data, indent=2)
+                st.download_button(
+                    label="📥 Download JSON",
+                    data=json_data,
+                    file_name=f"noise_floor_analysis_{st.session_state.session_id}.json",
+                    mime="application/json",
+                    use_container_width=True
+                )
+            
+            with exp_col3:
+                st.markdown(f"""
+                <div style="background: rgba(34,197,94,0.1); border: 1px solid rgba(34,197,94,0.3); 
+                            border-radius: 8px; padding: 12px; font-size: 0.8rem;">
+                    <strong style="color: #22c55e;">📊 Report Ready</strong><br>
+                    <span style="color: #94a3b8;">Session: {st.session_state.session_id}<br>
+                    Frames: {len(tdi_vals)} | Peak TDI: {max(tdi_vals):.1f}</span>
+                </div>
+                """, unsafe_allow_html=True)
+            
+            st.markdown("<br>", unsafe_allow_html=True)
+            
+            # Stats Cards
+            col1, col2, col3, col4 = st.columns(4)
+            
+            with col1:
+                st.markdown(f"""
+                <div class="metric-card">
+                    <div class="metric-value normal">{np.mean(tdi_vals):.1f}</div>
+                    <div class="metric-label">Average TDI</div>
+                </div>
+                """, unsafe_allow_html=True)
+            
+            with col2:
+                st.markdown(f"""
+                <div class="metric-card">
+                    <div class="metric-value warning">{max(tdi_vals):.1f}</div>
+                    <div class="metric-label">Peak TDI</div>
+                </div>
+                """, unsafe_allow_html=True)
+            
+            with col3:
+                normal_pct = zones.count('NORMAL') / len(zones) * 100
+                st.markdown(f"""
+                <div class="metric-card">
+                    <div class="metric-value normal">{normal_pct:.0f}%</div>
+                    <div class="metric-label">Time in Normal</div>
+                </div>
+                """, unsafe_allow_html=True)
+            
+            with col4:
+                transitions = sum(1 for i in range(1, len(zones)) if zones[i] != zones[i-1])
+                st.markdown(f"""
+                <div class="metric-card">
+                    <div class="metric-value">{transitions}</div>
+                    <div class="metric-label">Zone Transitions</div>
+                </div>
+                """, unsafe_allow_html=True)
+            
+            # Zone distribution
+            st.markdown('<div class="section-header"><span class="section-icon">🥧</span><span class="section-title">Zone Distribution</span></div>', unsafe_allow_html=True)
+            
+            zone_counts = {z: zones.count(z) for z in ['NORMAL', 'WATCH', 'WARNING', 'CRITICAL']}
+            
+            fig = go.Figure(go.Pie(
+                labels=list(zone_counts.keys()),
+                values=list(zone_counts.values()),
+                marker_colors=['#22c55e', '#eab308', '#f97316', '#ef4444'],
+                hole=0.4,
+                textinfo='percent+label',
+                textfont=dict(color='white', size=12)
+            ))
+            
+            fig.update_layout(
+                height=300, margin=dict(l=20, r=20, t=20, b=20),
+                paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(10,13,18,0.5)',
+                font=dict(color='#94a3b8'),
+                showlegend=False
+            )
+            
+            st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False})
+        
+        else:
+            st.info("Run analysis to see analytics data.")
+
+
+if __name__ == "__main__":
+    main()

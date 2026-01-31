@@ -55,3 +55,5 @@ data/*.npy
 # Environment variables
 .env
 .env.local
+UCSD_Anomaly_Dataset.v1p2
+

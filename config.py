@@ -48,9 +48,15 @@ Both modes produce identical 24-feature vectors for LSTM-VAE processing.
 DATA_MODE = "real_video"  # "synthetic" | "real_video"
 
 # Real video data paths - UCSD Anomaly Detection Dataset (Local)
-UCSD_DATASET_PATH = r"C:\Users\raghav\NoiseFloor_IPEC\Noise_floor_project\data\UCSD_Anomaly_Dataset.v1p2"
+UCSD_DATASET_PATH = Path(__file__).parent / "data" / "UCSD_Anomaly_Dataset.v1p2"
 UCSD_SUBSET = "ped1"                        # "ped1" or "ped2"
 CUSTOM_VIDEO_PATH = None                    # Path to custom surveillance video
+
+# Drone vs Bird Dataset (Airspace Security)
+DRONE_BIRD_DATASET_PATH = Path(__file__).parent / "data" / "Drone_vs_Bird"
+
+# Dataset Selection: "ucsd" | "drone_bird" | "synthetic"
+ACTIVE_DATASET = "ucsd"  # Default dataset
 
 # =============================================================================
 # BASELINE FREEZE CONFIGURATION
