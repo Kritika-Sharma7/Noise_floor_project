@@ -1,19 +1,19 @@
-"""
-NOISE FLOOR - Defense-Grade Surveillance Intelligence Dashboard
+﻿"""
+DRISHTI - Defense-Grade Surveillance Intelligence Dashboard
 =================================================================
 Real-time behavioral drift detection for border security.
 
 Features:
-• UCSD Dataset Integration with Real Video Frames
-• Multi-Camera Grid View
-• LSTM-VAE Temporal Normality Learning
-• ENSEMBLE DETECTION (Isolation Forest + One-Class SVM + LOF)
-• 4-Tier Risk Zone Classification
-• Explainable AI Attribution
-• Anomaly Classification & Incident Logging
-• 3D Latent Space Visualization
-• Real-time Threat Deviation Index (TDI)
-• TDI Forecasting & Trend Prediction
+â€¢ UCSD Dataset Integration with Real Video Frames
+â€¢ Multi-Camera Grid View
+â€¢ LSTM-VAE Temporal Normality Learning
+â€¢ ENSEMBLE DETECTION (Isolation Forest + One-Class SVM + LOF)
+â€¢ 4-Tier Risk Zone Classification
+â€¢ Explainable AI Attribution
+â€¢ Anomaly Classification & Incident Logging
+â€¢ 3D Latent Space Visualization
+â€¢ Real-time Threat Deviation Index (TDI)
+â€¢ TDI Forecasting & Trend Prediction
 
 Run: streamlit run dashboard/app_main.py
 """
@@ -81,8 +81,8 @@ except ImportError:
 # PAGE CONFIG
 # =============================================================================
 st.set_page_config(
-    page_title="NOISE FLOOR - Defense Intelligence",
-    page_icon="🛡️",
+    page_title="DRISHTI - Defense Intelligence",
+    page_icon="ðŸ‘ï¸",
     layout="wide",
     initial_sidebar_state="expanded"
 )
@@ -141,23 +141,56 @@ st.markdown("""
     }
     
     .logo-icon {
-        width: 56px;
-        height: 56px;
-        background: linear-gradient(135deg, #22c55e, #16a34a);
-        border-radius: 14px;
+        width: 60px;
+        height: 60px;
+        background: linear-gradient(135deg, #0f172a, #1e293b);
+        border-radius: 16px;
         display: flex;
         align-items: center;
         justify-content: center;
-        font-size: 1.8rem;
-        box-shadow: 0 0 40px rgba(34, 197, 94, 0.4);
+        position: relative;
+        box-shadow: 0 0 40px rgba(6, 182, 212, 0.3), inset 0 0 20px rgba(6, 182, 212, 0.1);
+        border: 2px solid rgba(6, 182, 212, 0.4);
+        overflow: hidden;
+    }
+    
+    .logo-icon::before {
+        content: '';
+        position: absolute;
+        width: 36px;
+        height: 36px;
+        background: linear-gradient(135deg, #06b6d4, #0891b2);
+        border-radius: 50%;
+        box-shadow: 0 0 20px rgba(6, 182, 212, 0.6), inset 0 0 10px rgba(255,255,255,0.2);
+    }
+    
+    .logo-icon::after {
+        content: '';
+        position: absolute;
+        width: 14px;
+        height: 14px;
+        background: radial-gradient(circle, #0f172a 40%, #06b6d4 100%);
+        border-radius: 50%;
+        box-shadow: 0 0 15px rgba(6, 182, 212, 0.8);
+        animation: pulse-eye 2s ease-in-out infinite;
+    }
+    
+    @keyframes pulse-eye {
+        0%, 100% { transform: scale(1); box-shadow: 0 0 15px rgba(6, 182, 212, 0.8); }
+        50% { transform: scale(1.1); box-shadow: 0 0 25px rgba(6, 182, 212, 1); }
     }
     
     .logo-text h1 {
         margin: 0;
-        font-size: 1.6rem;
+        font-size: 1.8rem;
         font-weight: 700;
         color: var(--text-primary);
         font-family: 'Inter', sans-serif;
+        letter-spacing: 3px;
+        background: linear-gradient(135deg, #ffffff, #06b6d4);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        background-clip: text;
     }
     
     .logo-text p {
@@ -165,7 +198,7 @@ st.markdown("""
         font-size: 0.7rem;
         color: var(--cyan);
         text-transform: uppercase;
-        letter-spacing: 2px;
+        letter-spacing: 3px;
         font-weight: 600;
     }
     
@@ -931,7 +964,6 @@ def load_all_drone_bird_frames(category: str = "mixed"):
     return frames
 
 
-@st.cache_data
 def create_detection_video(dataset_type: str = "ucsd"):
     """Create a video file with detection overlays for playback.
     
@@ -939,10 +971,11 @@ def create_detection_video(dataset_type: str = "ucsd"):
         dataset_type: 'ucsd' or 'drone_bird'
     
     Returns:
-        Path to the generated video file, anomaly_start_frame, total_frames
+        Tuple: (path, anomaly_start, total_frames, processed_frames_list, incidents_list)
     """
     import tempfile
     import subprocess
+    from datetime import datetime, timedelta
     
     # Load frames based on dataset type
     if dataset_type == "drone_bird":
@@ -959,14 +992,18 @@ def create_detection_video(dataset_type: str = "ucsd"):
         anomaly_label = "Anomaly Detected"
     
     if not frames:
-        return None, 0, 0
+        return None, 0, 0, [], []
+    
+    # Track incidents from video detection
+    video_incidents = []
+    incident_logged = {"early": False, "drift": False, "threat": False}
     
     # Create temp directory for frames
-    temp_dir = Path(tempfile.gettempdir()) / f"noisefloor_{dataset_type}"
+    temp_dir = Path(tempfile.gettempdir()) / f"drishti_{dataset_type}"
     temp_dir.mkdir(exist_ok=True)
     
     # Output path
-    output_path = Path(tempfile.gettempdir()) / f"noisefloor_{dataset_type}_detection.webm"
+    output_path = Path(tempfile.gettempdir()) / f"drishti_{dataset_type}_detection.webm"
     
     # Video settings
     h, w = frames[0].shape[:2]
@@ -989,6 +1026,7 @@ def create_detection_video(dataset_type: str = "ucsd"):
             box_color = (0, 255, 0)  # Green (BGR)
             label = normal_label
             status_bg = (0, 100, 0)
+            zone = "Normal"
         else:
             progress = (idx - anomaly_start_idx) / max(total_frames - anomaly_start_idx, 1)
             tdi = 25 + progress * 55
@@ -997,14 +1035,56 @@ def create_detection_video(dataset_type: str = "ucsd"):
                 status = "EARLY WARNING"
                 box_color = (0, 200, 255)  # Orange
                 status_bg = (0, 100, 150)
+                zone = "Watch"
+                # Log early warning incident
+                if not incident_logged["early"]:
+                    video_incidents.append({
+                        'timestamp': datetime.now().isoformat(),
+                        'frame': idx,
+                        'tdi': tdi,
+                        'zone': zone,
+                        'severity': 'LOW',
+                        'type': 'Drift Onset',
+                        'source': 'Video Detection',
+                        'description': f"Early behavioral drift detected - {anomaly_label}"
+                    })
+                    incident_logged["early"] = True
             elif progress < 0.6:
                 status = "DRIFT DETECTED"
                 box_color = (0, 140, 255)  # Deep orange
                 status_bg = (0, 70, 150)
+                zone = "Warning"
+                # Log drift detected incident
+                if not incident_logged["drift"]:
+                    video_incidents.append({
+                        'timestamp': datetime.now().isoformat(),
+                        'frame': idx,
+                        'tdi': tdi,
+                        'zone': zone,
+                        'severity': 'MEDIUM',
+                        'type': 'Confirmed Drift',
+                        'source': 'Video Detection',
+                        'description': f"Significant behavioral drift - {anomaly_label}"
+                    })
+                    incident_logged["drift"] = True
             else:
                 status = "THREAT CONFIRMED"
                 box_color = (0, 0, 255)  # Red
                 status_bg = (0, 0, 150)
+                zone = "Critical"
+                # Log threat incident
+                if not incident_logged["threat"]:
+                    video_incidents.append({
+                        'timestamp': datetime.now().isoformat(),
+                        'frame': idx,
+                        'tdi': tdi,
+                        'zone': zone,
+                        'severity': 'HIGH',
+                        'type': 'Threat Confirmed',
+                        'source': 'Video Detection',
+                        'description': f"CRITICAL: Threat confirmed - {anomaly_label}"
+                    })
+                    incident_logged["threat"] = True
             label = anomaly_label
         
         # Draw detection box
@@ -1053,7 +1133,7 @@ def create_detection_video(dataset_type: str = "ucsd"):
         import imageio
         
         # Create MP4 with imageio-ffmpeg (H.264)
-        output_path = Path(tempfile.gettempdir()) / f"noisefloor_{dataset_type}_detection.mp4"
+        output_path = Path(tempfile.gettempdir()) / f"drishti_{dataset_type}_detection.mp4"
         
         # Convert BGR to RGB
         rgb_frames = [cv2.cvtColor(f, cv2.COLOR_BGR2RGB) for f in processed_frames]
@@ -1066,7 +1146,7 @@ def create_detection_video(dataset_type: str = "ucsd"):
         writer.close()
         
         if output_path.exists() and output_path.stat().st_size > 1000:
-            return str(output_path), anomaly_start_idx, total_frames
+            return str(output_path), anomaly_start_idx, total_frames, processed_frames, video_incidents
             
     except Exception as e:
         pass
@@ -1074,7 +1154,7 @@ def create_detection_video(dataset_type: str = "ucsd"):
     # Fallback: Create GIF using PIL (guaranteed to work)
     try:
         from PIL import Image
-        gif_path = Path(tempfile.gettempdir()) / f"noisefloor_{dataset_type}_detection.gif"
+        gif_path = Path(tempfile.gettempdir()) / f"drishti_{dataset_type}_detection.gif"
         
         # Convert BGR to RGB PIL Images - use every 3rd frame for smaller size
         pil_frames = []
@@ -1093,11 +1173,11 @@ def create_detection_video(dataset_type: str = "ucsd"):
             )
             
             if gif_path.exists():
-                return str(gif_path), anomaly_start_idx, total_frames
+                return str(gif_path), anomaly_start_idx, total_frames, processed_frames, video_incidents
     except Exception as e:
         pass
     
-    return None, anomaly_start_idx, total_frames
+    return None, anomaly_start_idx, total_frames, processed_frames, video_incidents
 
 
 # =============================================================================
@@ -1509,17 +1589,17 @@ def main():
     
     # Sidebar
     with st.sidebar:
-        st.markdown('<div class="sidebar-section"><div class="sidebar-title">⚙️ Control Panel</div></div>', unsafe_allow_html=True)
+        st.markdown('<div class="sidebar-section"><div class="sidebar-title"> Control Panel</div></div>', unsafe_allow_html=True)
         
         # Data Mode
-        st.markdown('<div class="sidebar-section"><div class="sidebar-title">📡 Data Source</div></div>', unsafe_allow_html=True)
+        st.markdown('<div class="sidebar-section"><div class="sidebar-title">ðŸ“¡ Data Source</div></div>', unsafe_allow_html=True)
         data_mode = st.radio(
             "Select Mode",
             ["synthetic", "ucsd_video", "drone_bird"],
             format_func=lambda x: {
-                "synthetic": "🔬 Synthetic Data",
-                "ucsd_video": "📹 UCSD Pedestrian",
-                "drone_bird": "🚁 Drone vs Bird"
+                "synthetic": "ðŸ”¬ Synthetic Data",
+                "ucsd_video": "UCSD Pedestrian",
+                "drone_bird": "Drone vs Bird"
             }.get(x, x),
             key="data_mode_select"
         )
@@ -1528,7 +1608,7 @@ def main():
             st.markdown("""
             <div style="background: rgba(6,182,212,0.1); border: 1px solid rgba(6,182,212,0.3); 
                         border-radius: 8px; padding: 10px; font-size: 0.75rem; margin: 10px 0;">
-                <strong style="color: #06b6d4;">📍 UCSD Pedestrian Dataset</strong><br>
+                <strong style="color: #06b6d4;">ðŸ“ UCSD Pedestrian Dataset</strong><br>
                 <span style="color: #94a3b8;">Train: Normal walking patterns<br>
                 Test: Bikes, skaters, carts (anomalies)</span>
             </div>
@@ -1538,46 +1618,45 @@ def main():
             st.markdown("""
             <div style="background: rgba(139,92,246,0.1); border: 1px solid rgba(139,92,246,0.3); 
                         border-radius: 8px; padding: 10px; font-size: 0.75rem; margin: 10px 0;">
-                <strong style="color: #8b5cf6;">🚁 Drone vs Bird Dataset</strong><br>
+                <strong style="color: #8b5cf6;"> Drone vs Bird Dataset</strong><br>
                 <span style="color: #94a3b8;">Train: Birds (natural movement)<br>
                 Test: Drones (mechanical movement)</span><br>
-                <span style="color: #f97316; font-size: 0.7rem;">⚡ Defense: Airspace Security</span>
+                <span style="color: #f97316; font-size: 0.7rem;">âš¡ Defense: Airspace Security</span>
             </div>
             """, unsafe_allow_html=True)
         
         st.markdown("---")
         
         # Parameters
-        st.markdown('<div class="sidebar-section"><div class="sidebar-title">🎚️ Parameters</div></div>', unsafe_allow_html=True)
+        st.markdown('<div class="sidebar-section"><div class="sidebar-title">ðŸŽšï¸ Parameters</div></div>', unsafe_allow_html=True)
         drift_start = st.slider("Drift Onset Frame", 50, 200, 100, help="When drift begins")
         drift_rate = st.slider("Drift Intensity", 0.01, 0.05, 0.02, 0.005)
         
         st.markdown("---")
         
         # Zone Thresholds
-        st.markdown('<div class="sidebar-section"><div class="sidebar-title">🎯 Zone Thresholds</div></div>', unsafe_allow_html=True)
+        st.markdown('<div class="sidebar-section"><div class="sidebar-title">ðŸŽ¯ Zone Thresholds</div></div>', unsafe_allow_html=True)
         watch_thresh = st.slider("Watch", 15, 35, 25)
         warning_thresh = st.slider("Warning", 35, 60, 50)
         critical_thresh = st.slider("Critical", 55, 85, 75)
         
         st.markdown("---")
         
-        # System Info
+        # System Info  
         st.markdown(f"""
         <div style="font-size: 0.7rem; color: #64748b; padding: 10px;">
             <strong>TRL-4</strong>: Lab Validated<br>
             <strong>Mode</strong>: Decision Support<br>
-            <strong>Dataset</strong>: {'🚁 Drone-Bird' if data_mode == 'drone_bird' else '📹 UCSD' if data_mode == 'ucsd_video' else '🔬 Synthetic'}<br>
             <strong>Philosophy</strong>: AI Assists, Not Replaces
         </div>
         """, unsafe_allow_html=True)
     
-    # Initialize system
-    use_real = data_mode in ["ucsd_video", "drone_bird"]
+    # Get data mode from session state (set by main control panel or sidebar)
+    data_mode = st.session_state.get('data_mode_main', st.session_state.get('data_mode_select', 'synthetic'))
+    
+    # Set initial values based on session state (will be overwritten by control panel)
+    use_real = data_mode == "ucsd_video"
     use_drone_bird = data_mode == "drone_bird"
-    (lstm_vae, drift_engine, zone_classifier, attributor, baseline_means, baseline_stds, 
-     feature_extractor, train_data, ensemble_detector, anomaly_classifier, 
-     confidence_calibrator, incident_logger, feature_names) = initialize_system(use_real, use_drone_bird)
     
     # Current status
     if st.session_state.history.get('tdi'):
@@ -1593,10 +1672,25 @@ def main():
     st.markdown(f"""
     <div class="main-header">
         <div class="logo-section">
-            <div class="logo-icon">🛡️</div>
+            <div class="logo-icon"><svg width="44" height="44" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+            <linearGradient id="eyeGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+                <stop offset="0%" style="stop-color:#00d4ff"/>
+                <stop offset="100%" style="stop-color:#0891b2"/>
+            </linearGradient>
+            <linearGradient id="irisGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+                <stop offset="0%" style="stop-color:#06b6d4"/>
+                <stop offset="100%" style="stop-color:#0e7490"/>
+            </linearGradient>
+        </defs>
+        <ellipse cx="50" cy="50" rx="45" ry="28" fill="none" stroke="url(#eyeGrad)" stroke-width="3"/>
+        <circle cx="50" cy="50" r="22" fill="url(#irisGrad)"/>
+        <circle cx="50" cy="50" r="10" fill="#0f172a"/>
+        <circle cx="45" cy="45" r="4" fill="rgba(255,255,255,0.8)"/>
+    </svg></div>
             <div class="logo-text">
-                <h1>NOISE FLOOR</h1>
-                <p>Defense Intelligence System</p>
+                <h1>DRISHTI</h1>
+                <p>Vigilant Defense Intelligence</p>
             </div>
         </div>
         <div class="status-section">
@@ -1606,15 +1700,58 @@ def main():
             </div>
             <div class="status-item">
                 <div class="status-label">Data Mode</div>
-                <div class="status-value">{"📹 UCSD" if use_real else "🔬 Synthetic"}</div>
+                <div class="status-value">{"Drone-Bird" if use_drone_bird else "UCSD" if use_real else "Synthetic"}</div>
             </div>
             <div class="status-badge {status_class}">{latest_zone}</div>
         </div>
     </div>
     """, unsafe_allow_html=True)
     
-    # Tabs
-    tab1, tab2, tab3, tab4, tab5 = st.tabs(["📊 Intelligence Dashboard", "🧠 AI Ensemble", "📹 Camera Grid", "🚨 Incident Log", "📈 Analytics"])
+    # Control Panel - Always visible above tabs
+    st.markdown("""
+    <div style="background: rgba(15, 19, 24, 0.8); border: 1px solid rgba(56, 189, 248, 0.2); 
+                border-radius: 12px; padding: 16px; margin-bottom: 20px;">
+        <div style="font-size: 0.75rem; color: #94a3b8; text-transform: uppercase; letter-spacing: 2px; margin-bottom: 12px;">
+             Control Panel
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+    
+    ctrl_col1, ctrl_col2, ctrl_col3, ctrl_col4 = st.columns([2, 1, 1, 1])
+    
+    with ctrl_col1:
+        data_mode_main = st.radio(
+            "Data Source",
+            ["synthetic", "ucsd_video", "drone_bird"],
+            format_func=lambda x: {
+                "synthetic": "Synthetic",
+                "ucsd_video": "UCSD Pedestrian",
+                "drone_bird": "Drone vs Bird"
+            }.get(x, x),
+            horizontal=True,
+            key="data_mode_main"
+        )
+    
+    with ctrl_col2:
+        drift_start = st.slider("Drift Onset", 50, 200, 100, key="drift_start_main")
+    
+    with ctrl_col3:
+        drift_rate = st.slider("Drift Rate", 0.01, 0.05, 0.02, 0.005, key="drift_rate_main")
+    
+    with ctrl_col4:
+        st.markdown("<br>", unsafe_allow_html=True)
+    
+    # Update data mode based on main selector
+    use_real = data_mode_main == "ucsd_video"
+    use_drone_bird = data_mode_main == "drone_bird"
+    
+    # Initialize system with selected data mode
+    (lstm_vae, drift_engine, zone_classifier, attributor, baseline_means, baseline_stds, 
+     feature_extractor, train_data, ensemble_detector, anomaly_classifier, 
+     confidence_calibrator, incident_logger, feature_names) = initialize_system(use_real, use_drone_bird)
+    
+    # Tabs - Consolidated to 4 main views
+    tab1, tab2, tab3, tab4 = st.tabs(["ðŸ“Š Intelligence Dashboard", "ðŸ§  AI Ensemble", "ðŸ“¹ Camera Grid", "¨ Incident Log & Export"])
     
     # =========================================================================
     # TAB 1: INTELLIGENCE DASHBOARD
@@ -1634,7 +1771,7 @@ def main():
             else: tdi_class = 'critical'
             
             # Zone info
-            zone_icons = {'NORMAL': '🟢', 'WATCH': '🟡', 'WARNING': '🟠', 'CRITICAL': '🔴'}
+            zone_icons = {'NORMAL': 'ðŸŸ¢', 'WATCH': 'ðŸŸ¡', 'WARNING': 'ðŸŸ ', 'CRITICAL': 'ðŸ”´'}
             zone_descs = {
                 'NORMAL': 'Stable behavior within baseline',
                 'WATCH': 'Weak drift detected - monitor closely',
@@ -1643,7 +1780,7 @@ def main():
             }
             
             # Trend info
-            trend_arrows = {'INCREASING': '↑', 'STABLE': '→', 'DECREASING': '↓'}
+            trend_arrows = {'INCREASING': 'â†‘', 'STABLE': 'â†’', 'DECREASING': 'â†“'}
             trend_classes = {'INCREASING': 'rising', 'STABLE': 'stable', 'DECREASING': 'falling'}
             
             # ROW 1: Main Metrics
@@ -1661,7 +1798,7 @@ def main():
             with col2:
                 st.markdown(f"""
                 <div class="zone-card">
-                    <div class="zone-icon">{zone_icons.get(zone, '⚪')}</div>
+                    <div class="zone-icon">{zone_icons.get(zone, 'âšª')}</div>
                     <div class="zone-name {zone.lower()}">{zone}</div>
                     <div class="zone-desc">{zone_descs.get(zone, '')}</div>
                 </div>
@@ -1671,7 +1808,7 @@ def main():
                 st.markdown(f"""
                 <div class="trend-card">
                     <div class="metric-label">Drift Trend</div>
-                    <div class="trend-arrow {trend_classes.get(trend, 'stable')}">{trend_arrows.get(trend, '→')}</div>
+                    <div class="trend-arrow {trend_classes.get(trend, 'stable')}">{trend_arrows.get(trend, 'â†’')}</div>
                     <div class="trend-text">{trend.title()}</div>
                 </div>
                 """, unsafe_allow_html=True)
@@ -1686,7 +1823,7 @@ def main():
                 """, unsafe_allow_html=True)
             
             # ROW 2: Timeline
-            st.markdown('<div class="section-header"><span class="section-icon">📈</span><span class="section-title">Threat Deviation Timeline</span></div>', unsafe_allow_html=True)
+            st.markdown('<div class="section-header"><span class="section-icon">ðŸ“ˆ</span><span class="section-title">Threat Deviation Timeline</span></div>', unsafe_allow_html=True)
             st.markdown('<div class="chart-container">', unsafe_allow_html=True)
             fig = create_tdi_timeline(st.session_state.history, st.session_state.get('actual_drift_start', drift_start))
             st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False})
@@ -1696,7 +1833,7 @@ def main():
             col_attr, col_exp = st.columns([1, 1])
             
             with col_attr:
-                st.markdown('<div class="section-header"><span class="section-icon">🔍</span><span class="section-title">Feature Attribution</span></div>', unsafe_allow_html=True)
+                st.markdown('<div class="section-header"><span class="section-icon">ðŸ”</span><span class="section-title">Feature Attribution</span></div>', unsafe_allow_html=True)
                 
                 if st.session_state.history.get('top_features') and st.session_state.history['top_features'][idx]:
                     for feat in st.session_state.history['top_features'][idx][:5]:
@@ -1716,13 +1853,13 @@ def main():
                         """, unsafe_allow_html=True)
             
             with col_exp:
-                st.markdown('<div class="section-header"><span class="section-icon">💡</span><span class="section-title">AI Explanation</span></div>', unsafe_allow_html=True)
+                st.markdown('<div class="section-header"><span class="section-icon">ðŸ’¡</span><span class="section-title">AI Explanation</span></div>', unsafe_allow_html=True)
                 
                 explanation = st.session_state.history['explanations'][idx] if st.session_state.history.get('explanations') else ""
                 st.markdown(f"""
                 <div class="explanation-card">
                     <div class="explanation-header">
-                        <span>🤖</span>
+                        <span>ðŸ¤–</span>
                         <span class="explanation-title">System Analysis</span>
                     </div>
                     <div class="explanation-text">{explanation if explanation else "Analyzing behavioral patterns..."}</div>
@@ -1740,7 +1877,7 @@ def main():
                     """, unsafe_allow_html=True)
             
             # ROW 4: Performance Metrics
-            st.markdown('<div class="section-header"><span class="section-icon">📋</span><span class="section-title">Detection Performance</span></div>', unsafe_allow_html=True)
+            st.markdown('<div class="section-header"><span class="section-icon">ðŸ“‹</span><span class="section-title">Detection Performance</span></div>', unsafe_allow_html=True)
             
             m1, m2, m3, m4 = st.columns(4)
             
@@ -1753,13 +1890,13 @@ def main():
             onset = st.session_state.drift_onset_frame
             delay = onset - actual_drift if onset and onset >= actual_drift else None
             
-            m1.metric("Detection Delay", f"{delay if delay else '—'} frames")
+            m1.metric("Detection Delay", f"{delay if delay else 'â€”'} frames")
             m2.metric("False Positive Rate", f"{fp_rate:.1f}%")
             m3.metric("Peak TDI", f"{max(tdi_vals):.1f}")
             m4.metric("Frames Analyzed", len(tdi_vals))
             
             # Reset
-            if st.button("🔄 Reset Session"):
+            if st.button("ðŸ”„ Reset Session"):
                 st.session_state.history = {k: [] for k in st.session_state.history}
                 st.session_state.drift_onset_frame = None
                 st.rerun()
@@ -1768,10 +1905,10 @@ def main():
             # Start screen
             st.markdown("""
             <div class="start-screen">
-                <div class="start-icon">🎯</div>
-                <div class="start-title">Initialize Defense Intelligence</div>
+                <div class="start-icon">ðŸ‘ï¸</div>
+                <div class="start-title">Initialize DRISHTI Intelligence</div>
                 <div class="start-desc">
-                    NOISE FLOOR analyzes behavioral patterns to detect gradual drift before threats manifest.
+                    DRISHTI analyzes behavioral patterns to detect gradual drift before threats manifest.
                     The system learns what "normal" looks like and alerts on subtle deviations.
                 </div>
             </div>
@@ -1780,14 +1917,14 @@ def main():
             if use_real:
                 st.markdown("""
                 <div style="text-align: center;">
-                    <div class="info-badge">📹 Using UCSD Pedestrian Dataset - Real surveillance footage</div>
+                    <div class="info-badge">ðŸ“¹ Using UCSD Pedestrian Dataset - Real surveillance footage</div>
                 </div>
                 """, unsafe_allow_html=True)
             
             col_s1, col_btn, col_s2 = st.columns([1, 1, 1])
             with col_btn:
-                if st.button("▶ Start Analysis", type="primary", use_container_width=True):
-                    with st.spinner("Running intelligence analysis..."):
+                if st.button("â–¶ Start Analysis", type="primary", use_container_width=True):
+                    with st.spinner("ðŸ” DRISHTI analyzing patterns..."):
                         results, drift_onset, actual_drift, incidents = run_simulation(
                             lstm_vae, drift_engine, zone_classifier, attributor,
                             baseline_means, baseline_stds, drift_start, drift_rate,
@@ -1819,7 +1956,7 @@ def main():
     # TAB 2: AI ENSEMBLE
     # =========================================================================
     with tab2:
-        st.markdown('<div class="section-header"><span class="section-icon">🧠</span><span class="section-title">Multi-Model Ensemble Detection</span></div>', unsafe_allow_html=True)
+        st.markdown('<div class="section-header"><span class="section-icon">ðŸ§ </span><span class="section-title">Multi-Model Ensemble Detection</span></div>', unsafe_allow_html=True)
         
         if st.session_state.history.get('tdi'):
             col_ens, col_lat = st.columns([1, 1])
@@ -1828,7 +1965,7 @@ def main():
                 # Ensemble Agreement Panel
                 st.markdown("""
                 <div class="ensemble-panel">
-                    <div class="ensemble-header">🔮 Ensemble Detector Votes</div>
+                    <div class="ensemble-header">ðŸ”® Ensemble Detector Votes</div>
                 """, unsafe_allow_html=True)
                 
                 # Get latest ensemble scores
@@ -1887,16 +2024,16 @@ def main():
                 """, unsafe_allow_html=True)
                 
                 # Anomaly Classification
-                st.markdown('<div class="section-header"><span class="section-icon">🏷️</span><span class="section-title">Anomaly Classification</span></div>', unsafe_allow_html=True)
+                st.markdown('<div class="section-header"><span class="section-icon">ðŸ·ï¸</span><span class="section-title">Anomaly Classification</span></div>', unsafe_allow_html=True)
                 
                 categories = st.session_state.history.get('anomaly_categories', ['normal'])
                 latest_category = categories[-1] if categories else 'normal'
                 
                 category_icons = {
-                    'normal': '✅', 'loitering': '🧍', 'intrusion': '⚠️', 
-                    'crowd_formation': '👥', 'erratic_movement': '🌀',
-                    'coordinated': '🎯', 'speed_anomaly': '⚡', 
-                    'direction_anomaly': '↩️', 'unknown': '❓'
+                    'normal': 'âœ…', 'loitering': 'ðŸ§', 'intrusion': 'âš ï¸', 
+                    'crowd_formation': 'ðŸ‘¥', 'erratic_movement': 'ðŸŒ€',
+                    'coordinated': 'ðŸŽ¯', 'speed_anomaly': 'âš¡', 
+                    'direction_anomaly': 'â†©ï¸', 'unknown': 'â“'
                 }
                 
                 category_colors = {
@@ -1908,7 +2045,7 @@ def main():
                 
                 st.markdown(f"""
                 <div class="classification-badge" style="border-color: {category_colors.get(latest_category, '#64748b')}30; color: {category_colors.get(latest_category, '#64748b')};">
-                    <span>{category_icons.get(latest_category, '❓')}</span>
+                    <span>{category_icons.get(latest_category, 'â“')}</span>
                     <span>{latest_category.replace('_', ' ').title()}</span>
                 </div>
                 """, unsafe_allow_html=True)
@@ -1927,7 +2064,7 @@ def main():
                         color = category_colors.get(cat, '#64748b')
                         st.markdown(f"""
                         <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">
-                            <span style="font-size: 0.8rem;">{category_icons.get(cat, '❓')}</span>
+                            <span style="font-size: 0.8rem;">{category_icons.get(cat, 'â“')}</span>
                             <span style="font-size: 0.75rem; color: #94a3b8; flex: 1;">{cat.replace('_', ' ').title()}</span>
                             <span style="font-size: 0.75rem; color: {color}; font-weight: 600;">{pct:.0f}%</span>
                         </div>
@@ -1935,7 +2072,7 @@ def main():
             
             with col_lat:
                 # 3D Latent Space Visualization
-                st.markdown('<div class="section-header"><span class="section-icon">🌌</span><span class="section-title">3D Latent Space Trajectory</span></div>', unsafe_allow_html=True)
+                st.markdown('<div class="section-header"><span class="section-icon">ðŸŒŒ</span><span class="section-title">3D Latent Space Trajectory</span></div>', unsafe_allow_html=True)
                 
                 latent_means = st.session_state.history.get('latent_means', [])
                 zones = st.session_state.history.get('zones', [])
@@ -1949,54 +2086,104 @@ def main():
                         y = latent_array[:, 1]
                         z = latent_array[:, 2]
                         
-                        zone_colors = {'NORMAL': '#22c55e', 'WATCH': '#eab308', 'WARNING': '#f97316', 'CRITICAL': '#ef4444'}
-                        colors = [zone_colors.get(zn, '#64748b') for zn in zones]
+                        # Color by zone status - this shows anomalies clearly
+                        zone_colors_map = {'NORMAL': '#22c55e', 'WATCH': '#eab308', 'WARNING': '#f97316', 'CRITICAL': '#ef4444'}
+                        colors = [zone_colors_map.get(zn, '#64748b') for zn in zones]
                         
-                        fig = go.Figure(data=[go.Scatter3d(
+                        fig = go.Figure()
+                        
+                        # Add trajectory line
+                        fig.add_trace(go.Scatter3d(
                             x=x, y=y, z=z,
-                            mode='lines+markers',
+                            mode='lines',
+                            line=dict(color='rgba(100, 116, 139, 0.4)', width=2),
+                            showlegend=False,
+                            hoverinfo='skip'
+                        ))
+                        
+                        # Add points colored by zone
+                        fig.add_trace(go.Scatter3d(
+                            x=x, y=y, z=z,
+                            mode='markers',
                             marker=dict(
-                                size=4,
-                                color=list(range(len(x))),
-                                colorscale='Viridis',
-                                opacity=0.8
+                                size=6,
+                                color=colors,
+                                opacity=0.9,
+                                line=dict(color='white', width=0.5)
                             ),
-                            line=dict(
-                                color='rgba(34, 197, 94, 0.3)',
-                                width=2
-                            ),
-                            hovertemplate='Frame %{customdata}<br>z1: %{x:.2f}<br>z2: %{y:.2f}<br>z3: %{z:.2f}<extra></extra>',
-                            customdata=list(range(len(x)))
-                        )])
+                            text=[f'Frame {i}<br>Zone: {z}' for i, z in enumerate(zones)],
+                            hovertemplate='%{text}<br>z1: %{x:.2f}<br>z2: %{y:.2f}<br>z3: %{z:.2f}<extra></extra>'
+                        ))
+                        
+                        # Add start point (large green)
+                        fig.add_trace(go.Scatter3d(
+                            x=[x[0]], y=[y[0]], z=[z[0]],
+                            mode='markers',
+                            marker=dict(size=12, color='#22c55e', symbol='diamond'),
+                            name='Start',
+                            hovertemplate='START<extra></extra>'
+                        ))
+                        
+                        # Find anomaly start and add marker
+                        anomaly_idx = next((i for i, zn in enumerate(zones) if zn in ['WARNING', 'CRITICAL']), None)
+                        if anomaly_idx:
+                            fig.add_trace(go.Scatter3d(
+                                x=[x[anomaly_idx]], y=[y[anomaly_idx]], z=[z[anomaly_idx]],
+                                mode='markers',
+                                marker=dict(size=14, color='#ef4444', symbol='x'),
+                                name='Anomaly Start',
+                                hovertemplate='âš ï¸ ANOMALY START<extra></extra>'
+                            ))
                         
                         fig.update_layout(
                             height=400,
                             margin=dict(l=0, r=0, t=20, b=0),
                             scene=dict(
-                                xaxis=dict(title='z₁', backgroundcolor='rgba(10,13,18,0.5)', gridcolor='rgba(255,255,255,0.05)'),
-                                yaxis=dict(title='z₂', backgroundcolor='rgba(10,13,18,0.5)', gridcolor='rgba(255,255,255,0.05)'),
-                                zaxis=dict(title='z₃', backgroundcolor='rgba(10,13,18,0.5)', gridcolor='rgba(255,255,255,0.05)'),
+                                xaxis=dict(title='zâ‚', backgroundcolor='rgba(10,13,18,0.5)', gridcolor='rgba(255,255,255,0.05)'),
+                                yaxis=dict(title='zâ‚‚', backgroundcolor='rgba(10,13,18,0.5)', gridcolor='rgba(255,255,255,0.05)'),
+                                zaxis=dict(title='zâ‚ƒ', backgroundcolor='rgba(10,13,18,0.5)', gridcolor='rgba(255,255,255,0.05)'),
                                 bgcolor='rgba(10,13,18,0.5)'
                             ),
                             paper_bgcolor='rgba(0,0,0,0)',
-                            font=dict(color='#94a3b8', size=10)
+                            font=dict(color='#94a3b8', size=10),
+                            showlegend=True,
+                            legend=dict(
+                                orientation='h',
+                                yanchor='bottom',
+                                y=-0.1,
+                                xanchor='center',
+                                x=0.5,
+                                font=dict(size=10)
+                            )
                         )
                         
                         st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False})
+                        
+                        # Legend explanation
+                        st.markdown("""
+                        <div style="display: flex; gap: 12px; justify-content: center; font-size: 0.75rem; margin-top: -10px;">
+                            <span>ðŸŸ¢ Normal</span>
+                            <span>ðŸŸ¡ Watch</span>
+                            <span>ðŸŸ  Warning</span>
+                            <span>ðŸ”´ Critical</span>
+                            <span>ðŸ’Ž Start</span>
+                            <span>âŒ Anomaly</span>
+                        </div>
+                        """, unsafe_allow_html=True)
                     else:
                         st.info("Insufficient latent dimensions for 3D visualization")
                 else:
                     st.info("Run analysis to see latent space trajectory")
                 
                 # TDI Forecast
-                st.markdown('<div class="section-header"><span class="section-icon">🔮</span><span class="section-title">TDI Forecast</span></div>', unsafe_allow_html=True)
+                st.markdown('<div class="section-header"><span class="section-icon">ðŸ”®</span><span class="section-title">TDI Forecast</span></div>', unsafe_allow_html=True)
                 
                 forecasts = st.session_state.history.get('forecasts', [])
                 if forecasts:
                     latest_forecast = forecasts[-1]
                     current_tdi = st.session_state.history['tdi'][-1]
                     
-                    forecast_trend = '↑' if latest_forecast > current_tdi else '↓' if latest_forecast < current_tdi else '→'
+                    forecast_trend = 'â†‘' if latest_forecast > current_tdi else 'â†“' if latest_forecast < current_tdi else 'â†’'
                     forecast_color = '#ef4444' if latest_forecast > 50 else '#eab308' if latest_forecast > 25 else '#22c55e'
                     
                     st.markdown(f"""
@@ -2017,23 +2204,23 @@ def main():
                     st.info("Run analysis to see TDI forecast")
         
         else:
-            st.info("▶ Run analysis from the Intelligence Dashboard tab to see ensemble detection results")
+            st.info("â–¶ Run analysis from the Intelligence Dashboard tab to see ensemble detection results")
     
     # =========================================================================
     # TAB 3: CAMERA GRID
     # =========================================================================
     with tab3:
-        st.markdown('<div class="section-header"><span class="section-icon">📹</span><span class="section-title">Multi-Camera Surveillance Grid</span></div>', unsafe_allow_html=True)
+        st.markdown('<div class="section-header"><span class="section-icon">ðŸ“¹</span><span class="section-title">Multi-Camera Surveillance Grid</span></div>', unsafe_allow_html=True)
         
         # =================================================================
         # LIVE DETECTION FEED - Playable Video with Anomaly Detection
         # =================================================================
         if use_real or use_drone_bird:
-            st.markdown('<div class="section-header"><span class="section-icon">🎬</span><span class="section-title">Live Detection Feed</span></div>', unsafe_allow_html=True)
+            st.markdown('<div class="section-header"><span class="section-icon">ðŸŽ¬</span><span class="section-title">Live Detection Feed</span></div>', unsafe_allow_html=True)
             
             # Determine dataset type
             dataset_type = "drone_bird" if use_drone_bird else "ucsd"
-            feed_title = "🚁 Airspace Surveillance - Drone Detection" if use_drone_bird else "🚶 Pedestrian Surveillance - Behavior Analysis"
+            feed_title = " Airspace Surveillance - Drone Detection" if use_drone_bird else "¶ Pedestrian Surveillance - Behavior Analysis"
             
             st.markdown(f"""
             <div style="text-align: center; padding: 12px; background: rgba(59, 130, 246, 0.1); border-radius: 8px; border: 1px solid rgba(59, 130, 246, 0.3); margin-bottom: 16px;">
@@ -2042,8 +2229,23 @@ def main():
             """, unsafe_allow_html=True)
             
             # Generate video with detection overlays
-            with st.spinner("🎬 Generating detection video..."):
-                video_path, anomaly_start, total_frames = create_detection_video(dataset_type)
+            with st.spinner("ðŸŽ¬ Generating detection video..."):
+                video_path, anomaly_start, total_frames, detection_frames, video_incidents = create_detection_video(dataset_type)
+            
+            # Store processed frames in session state for camera grid sync
+            if detection_frames:
+                st.session_state['detection_video_frames'] = detection_frames
+                st.session_state['anomaly_start_frame'] = anomaly_start
+                
+            # Add video detection incidents to session state
+            if video_incidents:
+                existing_incidents = st.session_state.get('incidents', [])
+                # Check if video incidents already added (avoid duplicates)
+                video_incident_types = {inc['type'] for inc in video_incidents}
+                existing_types = {inc.get('type', '') for inc in existing_incidents if inc.get('source') == 'Video Detection'}
+                new_incidents = [inc for inc in video_incidents if inc['type'] not in existing_types]
+                if new_incidents:
+                    st.session_state.incidents = existing_incidents + new_incidents
             
             if video_path and Path(video_path).exists():
                 col_video, col_info = st.columns([2, 1])
@@ -2053,7 +2255,7 @@ def main():
                     if video_path.endswith('.gif'):
                         # Display GIF as image (auto-plays)
                         st.image(video_path, use_container_width=True)
-                        st.caption("🔄 GIF auto-loops - Watch the detection progression")
+                        st.caption("ðŸ”„ GIF auto-loops - Watch the detection progression")
                     else:
                         # Play the video
                         video_file = open(video_path, 'rb')
@@ -2063,7 +2265,7 @@ def main():
                     st.markdown(f"""
                     <div style="margin-top: 8px; padding: 10px; background: rgba(30, 41, 59, 0.5); border-radius: 8px; text-align: center;">
                         <span style="color: #94a3b8; font-size: 0.85rem;">
-                            🟢 Normal → 🟡 Early Warning → 🟠 Drift → 🔴 Anomaly
+                            ðŸŸ¢ Normal â†’ ðŸŸ¡ Early Warning â†’ ðŸŸ  Drift â†’ ðŸ”´ Anomaly
                         </span>
                     </div>
                     """, unsafe_allow_html=True)
@@ -2102,27 +2304,38 @@ def main():
                     """, unsafe_allow_html=True)
                     
                     # Use columns for phases instead of complex HTML
-                    st.markdown(f"🟢 **{normal_label}**")
-                    st.markdown("🟡 **Early Warning**")
-                    st.markdown("🟠 **Drift Detected**")
-                    st.markdown(f"🔴 **{anomaly_label}**")
+                    st.markdown(f"ðŸŸ¢ **{normal_label}**")
+                    st.markdown("ðŸŸ¡ **Early Warning**")
+                    st.markdown("ðŸŸ  **Drift Detected**")
+                    st.markdown(f"ðŸ”´ **{anomaly_label}**")
                     
                     # Key insight
-                    st.info("💡 Watch how TDI rises BEFORE the threat is fully visible - that's early warning detection!")
+                    st.info("ðŸ’¡ Watch how TDI rises BEFORE the threat is fully visible - that's early warning detection!")
             else:
                 st.warning("Could not generate detection video. Make sure dataset is available.")
             
             st.markdown("---")
         
-        st.markdown('<div class="section-header"><span class="section-icon">📹</span><span class="section-title">Multi-Camera Grid</span></div>', unsafe_allow_html=True)
+        st.markdown('<div class="section-header"><span class="section-icon">ðŸ“¹</span><span class="section-title">Multi-Camera Grid</span></div>', unsafe_allow_html=True)
         
-        # Load frames based on selected mode
-        if use_drone_bird:
+        # Load frames based on selected mode - prioritize detection video frames if available
+        detection_frames = st.session_state.get('detection_video_frames', [])
+        
+        if detection_frames:
+            # Use the exact same frames from the detection video
+            all_frames = detection_frames
+            frame_source = "Video Detection"
+            st.markdown(f"""
+            <div class="info-badge" style="margin-bottom: 16px; background: rgba(16, 185, 129, 0.1); border-color: rgba(16, 185, 129, 0.3); color: #10b981;">
+                ðŸŽ¯ <strong>Synced Feed:</strong> {len(all_frames)} processed frames from Detection Video
+            </div>
+            """, unsafe_allow_html=True)
+        elif use_drone_bird:
             all_frames = load_all_drone_bird_frames("mixed")
             if all_frames:
                 st.markdown(f"""
                 <div class="info-badge" style="margin-bottom: 16px; background: rgba(16, 185, 129, 0.1); border-color: rgba(16, 185, 129, 0.3); color: #10b981;">
-                    🚁 Airspace Feed: {len(all_frames)} frames from Drone vs Bird Dataset
+                     Airspace Feed: {len(all_frames)} frames from Drone vs Bird Dataset
                 </div>
                 """, unsafe_allow_html=True)
         elif use_real:
@@ -2130,14 +2343,14 @@ def main():
             if all_frames:
                 st.markdown(f"""
                 <div class="info-badge" style="margin-bottom: 16px;">
-                    📹 Live Feed: {len(all_frames)} frames from UCSD Pedestrian Dataset
+                    ðŸ“¹ Live Feed: {len(all_frames)} frames from UCSD Pedestrian Dataset
                 </div>
                 """, unsafe_allow_html=True)
         else:
             all_frames = []
             st.markdown("""
             <div class="info-badge" style="margin-bottom: 16px; background: rgba(139, 92, 246, 0.1); border-color: rgba(139, 92, 246, 0.3); color: #8b5cf6;">
-                🔬 Synthetic Mode: Simulated camera feeds (switch to UCSD Real Video for live frames)
+                ðŸ”¬ Synthetic Mode: Simulated camera feeds (switch to UCSD Real Video for live frames)
             </div>
             """, unsafe_allow_html=True)
         
@@ -2152,30 +2365,85 @@ def main():
                 elif cam['tdi'] < 75: cam['status'] = 'WARNING'
                 else: cam['status'] = 'CRITICAL'
         
-        # Display cameras
+        # Display cameras with detection overlays
         cols = st.columns(3)
         zone_colors = {'NORMAL': '#22c55e', 'WATCH': '#eab308', 'WARNING': '#f97316', 'CRITICAL': '#ef4444'}
+        zone_colors_bgr = {'NORMAL': (0, 255, 0), 'WATCH': (0, 200, 255), 'WARNING': (0, 140, 255), 'CRITICAL': (0, 0, 255)}
+        status_labels = {'NORMAL': 'NORMAL', 'WATCH': 'EARLY WARNING', 'WARNING': 'DRIFT DETECTED', 'CRITICAL': 'THREAT'}
         
         for i, cam in enumerate(st.session_state.cameras):
             with cols[i % 3]:
                 color = zone_colors.get(cam['status'], '#64748b')
+                box_color_bgr = zone_colors_bgr.get(cam['status'], (100, 100, 100))
+                status_text = status_labels.get(cam['status'], 'UNKNOWN')
                 
-                # Show real frame for UCSD or Drone-Bird mode
-                if (use_real or use_drone_bird) and all_frames:
+                # Check if we have detection video frames (already processed with overlays)
+                detection_frames = st.session_state.get('detection_video_frames', [])
+                
+                if detection_frames:
+                    # Use pre-processed frames from detection video - already have overlays
+                    # Each camera shows sequential frames to simulate multi-view
+                    frame_offset = cam.get('frame_idx', i * 15) % len(detection_frames)
+                    frame = detection_frames[frame_offset]  # Already in BGR with overlays
+                    
+                    # Convert to base64
+                    _, buffer = cv2.imencode('.jpg', frame)
+                    frame_b64 = base64.b64encode(buffer).decode('utf-8')
+                    
+                    if frame_b64:
+                        frame_html = f'<img src="data:image/jpeg;base64,{frame_b64}" style="width: 100%; height: 140px; object-fit: cover;">'
+                    else:
+                        frame_html = '<span style="color: #64748b; font-size: 2.5rem;">ðŸ“·</span>'
+                        
+                # Show real frame for UCSD or Drone-Bird mode with detection overlays
+                elif (use_real or use_drone_bird) and all_frames:
                     # Each camera shows different frames
                     frame_offset = cam.get('frame_idx', i * 30) % len(all_frames)
-                    frame = all_frames[frame_offset]
-                    frame_b64 = frame_to_base64(frame)
+                    frame = all_frames[frame_offset].copy()
+                    
+                    # Convert to color if grayscale
+                    if len(frame.shape) == 2:
+                        frame = cv2.cvtColor(frame, cv2.COLOR_GRAY2BGR)
+                    
+                    h, w = frame.shape[:2]
+                    
+                    # Draw detection box based on status
+                    box_x1, box_y1 = int(w * 0.15), int(h * 0.1)
+                    box_x2, box_y2 = int(w * 0.85), int(h * 0.9)
+                    cv2.rectangle(frame, (box_x1, box_y1), (box_x2, box_y2), box_color_bgr, 2)
+                    
+                    # Detection label
+                    detect_label = "Normal" if cam['status'] == 'NORMAL' else "ANOMALY"
+                    if use_drone_bird:
+                        detect_label = "BIRD" if cam['status'] == 'NORMAL' else "DRONE"
+                    
+                    label_size = cv2.getTextSize(detect_label, cv2.FONT_HERSHEY_SIMPLEX, 0.4, 1)[0]
+                    cv2.rectangle(frame, (box_x1, box_y1 - 15), (box_x1 + label_size[0] + 6, box_y1), box_color_bgr, -1)
+                    cv2.putText(frame, detect_label, (box_x1 + 3, box_y1 - 4), cv2.FONT_HERSHEY_SIMPLEX, 0.4, (255, 255, 255), 1)
+                    
+                    # TDI on frame
+                    tdi_text = f"TDI:{cam['tdi']:.0f}"
+                    cv2.rectangle(frame, (3, 3), (60, 18), (30, 30, 30), -1)
+                    cv2.putText(frame, tdi_text, (5, 14), cv2.FONT_HERSHEY_SIMPLEX, 0.35, box_color_bgr, 1)
+                    
+                    # Status indicator
+                    status_bg = {'NORMAL': (0, 80, 0), 'WATCH': (0, 80, 120), 'WARNING': (0, 60, 120), 'CRITICAL': (0, 0, 120)}
+                    cv2.rectangle(frame, (w - 70, 3), (w - 3, 18), status_bg.get(cam['status'], (50, 50, 50)), -1)
+                    cv2.putText(frame, status_text[:8], (w - 68, 14), cv2.FONT_HERSHEY_SIMPLEX, 0.3, (255, 255, 255), 1)
+                    
+                    # Convert to base64
+                    _, buffer = cv2.imencode('.jpg', frame)
+                    frame_b64 = base64.b64encode(buffer).decode('utf-8')
+                    
                     if frame_b64:
-                        filter_style = "filter: brightness(0.9);" if use_real else "filter: brightness(0.85) contrast(1.1);"
-                        frame_html = f'<img src="data:image/jpeg;base64,{frame_b64}" style="width: 100%; height: 140px; object-fit: cover; {filter_style}">'
+                        frame_html = f'<img src="data:image/jpeg;base64,{frame_b64}" style="width: 100%; height: 140px; object-fit: cover;">'
                     else:
-                        frame_html = '<span style="color: #64748b; font-size: 2.5rem;">📷</span>'
+                        frame_html = '<span style="color: #64748b; font-size: 2.5rem;">ðŸ“·</span>'
                 else:
                     # Synthetic mode - show simulated camera icon with status color
                     frame_html = f'''
                     <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%;">
-                        <span style="font-size: 2.5rem; opacity: 0.6;">📹</span>
+                        <span style="font-size: 2.5rem; opacity: 0.6;">ðŸ“¹</span>
                         <span style="font-size: 0.7rem; color: {color}; margin-top: 8px;">SIMULATED</span>
                     </div>
                     '''
@@ -2203,7 +2471,7 @@ def main():
     # TAB 4: INCIDENT LOG
     # =========================================================================
     with tab4:
-        st.markdown('<div class="section-header"><span class="section-icon">🚨</span><span class="section-title">Incident Log & Alert History</span></div>', unsafe_allow_html=True)
+        st.markdown('<div class="section-header"><span class="section-icon">¨</span><span class="section-title">Incident Log & Alert History</span></div>', unsafe_allow_html=True)
         
         incidents = st.session_state.get('incidents', [])
         
@@ -2220,20 +2488,22 @@ def main():
                 """, unsafe_allow_html=True)
             
             with col_s2:
-                critical_count = sum(1 for i in incidents if i.get('zone') == 'CRITICAL')
+                # Count HIGH severity or CRITICAL zone incidents
+                critical_count = sum(1 for i in incidents if i.get('zone') in ['CRITICAL', 'Critical'] or i.get('severity') == 'HIGH')
                 st.markdown(f"""
                 <div class="metric-card">
                     <div class="metric-value critical">{critical_count}</div>
-                    <div class="metric-label">Critical Alerts</div>
+                    <div class="metric-label">Critical/High Alerts</div>
                 </div>
                 """, unsafe_allow_html=True)
             
             with col_s3:
-                categories = [i.get('category', 'unknown') for i in incidents]
+                # Include both category and type fields
+                categories = [i.get('category', i.get('type', 'unknown')) for i in incidents]
                 most_common = max(set(categories), key=categories.count) if categories else 'N/A'
                 st.markdown(f"""
                 <div class="metric-card">
-                    <div class="metric-value" style="font-size: 1.2rem;">{most_common.replace('_', ' ').title()}</div>
+                    <div class="metric-value" style="font-size: 1.2rem;">{str(most_common).replace('_', ' ').title()}</div>
                     <div class="metric-label">Most Common Type</div>
                 </div>
                 """, unsafe_allow_html=True)
@@ -2250,7 +2520,7 @@ def main():
             st.markdown("<br>", unsafe_allow_html=True)
             
             # Incident Timeline Chart
-            st.markdown('<div class="section-header"><span class="section-icon">📈</span><span class="section-title">Incident Timeline</span></div>', unsafe_allow_html=True)
+            st.markdown('<div class="section-header"><span class="section-icon">ðŸ“ˆ</span><span class="section-title">Incident Timeline</span></div>', unsafe_allow_html=True)
             
             fig = go.Figure()
             
@@ -2258,8 +2528,13 @@ def main():
             tdis = [i.get('tdi', 0) for i in incidents]
             zones = [i.get('zone', 'WARNING') for i in incidents]
             
-            zone_colors = {'WARNING': '#f97316', 'CRITICAL': '#ef4444'}
-            colors = [zone_colors.get(z, '#f97316') for z in zones]
+            zone_colors_map = {
+                'NORMAL': '#22c55e', 'Normal': '#22c55e',
+                'WATCH': '#eab308', 'Watch': '#eab308',
+                'WARNING': '#f97316', 'Warning': '#f97316',
+                'CRITICAL': '#ef4444', 'Critical': '#ef4444'
+            }
+            colors = [zone_colors_map.get(z, '#f97316') for z in zones]
             
             fig.add_trace(go.Scatter(
                 x=frames, y=tdis,
@@ -2281,24 +2556,32 @@ def main():
             st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False})
             
             # Incident List
-            st.markdown('<div class="section-header"><span class="section-icon">📋</span><span class="section-title">Incident Details</span></div>', unsafe_allow_html=True)
+            st.markdown('<div class="section-header"><span class="section-icon">ðŸ“‹</span><span class="section-title">Incident Details</span></div>', unsafe_allow_html=True)
             
             for incident in reversed(incidents[-20:]):  # Show last 20
                 zone = incident.get('zone', 'WARNING')
-                zone_color = '#f97316' if zone == 'WARNING' else '#ef4444'
-                category = incident.get('category', 'unknown')
+                zone_color = '#22c55e' if zone in ['Normal', 'NORMAL'] else ('#eab308' if zone in ['Watch', 'WATCH'] else ('#f97316' if zone in ['Warning', 'WARNING'] else '#ef4444'))
+                category = incident.get('category', incident.get('type', 'unknown'))
+                severity = incident.get('severity', 'MEDIUM')
+                source = incident.get('source', 'Analysis')
+                description = incident.get('description', '')
                 
                 category_icons = {
-                    'normal': '✅', 'loitering': '🧍', 'intrusion': '⚠️', 
-                    'crowd_formation': '👥', 'erratic_movement': '🌀',
-                    'coordinated': '🎯', 'speed_anomaly': '⚡', 
-                    'direction_anomaly': '↩️', 'unknown': '❓'
+                    'normal': 'âœ…', 'loitering': 'ðŸ§', 'intrusion': 'âš ï¸', 
+                    'crowd_formation': 'ðŸ‘¥', 'erratic_movement': 'ðŸŒ€',
+                    'coordinated': 'ðŸŽ¯', 'speed_anomaly': 'âš¡', 
+                    'direction_anomaly': 'â†©ï¸', 'unknown': 'â“',
+                    'Drift Onset': 'ðŸŸ¡', 'Confirmed Drift': 'ðŸŸ ', 
+                    'Threat Confirmed': 'ðŸ”´', 'Video Detection': 'ðŸ“¹'
                 }
+                
+                severity_colors = {'LOW': '#eab308', 'MEDIUM': '#f97316', 'HIGH': '#ef4444'}
+                severity_color = severity_colors.get(severity, zone_color)
                 
                 st.markdown(f"""
                 <div class="incident-card" style="border-left: 3px solid {zone_color};">
                     <div class="incident-header">
-                        <span class="incident-id">{incident.get('id', 'N/A')}</span>
+                        <span class="incident-id">{incident.get('id', source)}</span>
                         <span class="incident-time">Frame {incident.get('frame', 0)}</span>
                     </div>
                     <div class="incident-body">
@@ -2311,11 +2594,16 @@ def main():
                             <div class="incident-metric-label">Zone</div>
                         </div>
                         <div class="incident-metric">
+                            <div class="incident-metric-value" style="color: {severity_color}; font-size: 0.9rem;">{severity}</div>
+                            <div class="incident-metric-label">Severity</div>
+                        </div>
+                        <div class="incident-metric">
                             <span class="incident-category" style="background: {zone_color}20; color: {zone_color};">
-                                {category_icons.get(category, '❓')} {category.replace('_', ' ').title()}
+                                {category_icons.get(category, 'ðŸ”')} {str(category).replace('_', ' ').title()}
                             </span>
                         </div>
                     </div>
+                    {f'<div style="margin-top: 8px; padding: 8px; background: rgba(30, 41, 59, 0.5); border-radius: 4px; font-size: 0.8rem; color: #94a3b8;">{description}</div>' if description else ''}
                 </div>
                 """, unsafe_allow_html=True)
             
@@ -2327,7 +2615,7 @@ def main():
                 incident_df = pd.DataFrame(incidents)
                 csv_data = incident_df.to_csv(index=False)
                 st.download_button(
-                    label="📥 Export Incidents CSV",
+                    label="ðŸ“¥ Export Incidents CSV",
                     data=csv_data,
                     file_name=f"incidents_{st.session_state.session_id}.csv",
                     mime="text/csv",
@@ -2337,154 +2625,119 @@ def main():
             with col_exp2:
                 json_data = json.dumps(incidents, indent=2)
                 st.download_button(
-                    label="📥 Export Incidents JSON",
+                    label="ðŸ“¥ Export Incidents JSON",
                     data=json_data,
                     file_name=f"incidents_{st.session_state.session_id}.json",
                     mime="application/json",
                     use_container_width=True
                 )
+            
+            # Full Session Export Section
+            st.markdown("<br>", unsafe_allow_html=True)
+            st.markdown('<div class="section-header"><span class="section-icon">ðŸ“Š</span><span class="section-title">Full Session Analytics & Export</span></div>', unsafe_allow_html=True)
+            
+            if st.session_state.history.get('tdi'):
+                tdi_vals = st.session_state.history['tdi']
+                zones = st.session_state.history['zones']
+                
+                # Quick stats row
+                stat_col1, stat_col2, stat_col3, stat_col4 = st.columns(4)
+                with stat_col1:
+                    st.markdown(f"""
+                    <div class="metric-card">
+                        <div class="metric-value normal">{np.mean(tdi_vals):.1f}</div>
+                        <div class="metric-label">Average TDI</div>
+                    </div>
+                    """, unsafe_allow_html=True)
+                with stat_col2:
+                    st.markdown(f"""
+                    <div class="metric-card">
+                        <div class="metric-value warning">{max(tdi_vals):.1f}</div>
+                        <div class="metric-label">Peak TDI</div>
+                    </div>
+                    """, unsafe_allow_html=True)
+                with stat_col3:
+                    normal_pct = zones.count('NORMAL') / len(zones) * 100 if zones else 0
+                    st.markdown(f"""
+                    <div class="metric-card">
+                        <div class="metric-value normal">{normal_pct:.0f}%</div>
+                        <div class="metric-label">Time in Normal</div>
+                    </div>
+                    """, unsafe_allow_html=True)
+                with stat_col4:
+                    st.markdown(f"""
+                    <div class="metric-card">
+                        <div class="metric-value">{len(tdi_vals)}</div>
+                        <div class="metric-label">Frames Analyzed</div>
+                    </div>
+                    """, unsafe_allow_html=True)
+                
+                # Full export buttons
+                exp_col1, exp_col2, exp_col3 = st.columns([1, 1, 2])
+                
+                with exp_col1:
+                    df = pd.DataFrame({
+                        'Frame': range(len(tdi_vals)),
+                        'TDI': tdi_vals,
+                        'Zone': zones,
+                        'Trend': st.session_state.history.get('trends', []),
+                        'Confidence': st.session_state.history.get('confidences', []),
+                    })
+                    csv_data = df.to_csv(index=False)
+                    st.download_button(
+                        label="ðŸ“¥ Full Analysis CSV",
+                        data=csv_data,
+                        file_name=f"drishti_analysis_{st.session_state.session_id}.csv",
+                        mime="text/csv",
+                        use_container_width=True
+                    )
+                
+                with exp_col2:
+                    export_data = {
+                        'session_id': st.session_state.session_id,
+                        'timestamp': datetime.now().isoformat(),
+                        'data_mode': 'real_video' if use_real else 'synthetic',
+                        'frames_analyzed': len(tdi_vals),
+                        'drift_onset_frame': st.session_state.drift_onset_frame,
+                        'peak_tdi': float(max(tdi_vals)),
+                        'avg_tdi': float(np.mean(tdi_vals)),
+                        'incidents': incidents,
+                        'history': {
+                            'tdi': [float(x) for x in tdi_vals],
+                            'zones': zones,
+                            'trends': st.session_state.history.get('trends', []),
+                        }
+                    }
+                    json_data = json.dumps(export_data, indent=2)
+                    st.download_button(
+                        label="ðŸ“¥ Full Analysis JSON",
+                        data=json_data,
+                        file_name=f"drishti_analysis_{st.session_state.session_id}.json",
+                        mime="application/json",
+                        use_container_width=True
+                    )
+                
+                with exp_col3:
+                    st.markdown(f"""
+                    <div style="background: rgba(34,197,94,0.1); border: 1px solid rgba(34,197,94,0.3); 
+                                border-radius: 8px; padding: 12px; font-size: 0.8rem;">
+                        <strong style="color: #22c55e;">ðŸ“Š Report Ready</strong><br>
+                        <span style="color: #94a3b8;">Session: {st.session_state.session_id}<br>
+                        Frames: {len(tdi_vals)} | Peak TDI: {max(tdi_vals):.1f}</span>
+                    </div>
+                    """, unsafe_allow_html=True)
+                    
         else:
             st.markdown("""
             <div style="text-align: center; padding: 60px 20px;">
-                <div style="font-size: 4rem; margin-bottom: 20px;">✅</div>
+                <div style="font-size: 4rem; margin-bottom: 20px;">âœ…</div>
                 <div style="font-size: 1.2rem; color: #22c55e; margin-bottom: 10px;">No Incidents Detected</div>
-                <div style="font-size: 0.85rem; color: #94a3b8;">All behavioral patterns within normal parameters</div>
+                <div style="font-size: 0.85rem; color: #94a3b8;">All behavioral patterns within normal parameters. Run analysis to generate data.</div>
             </div>
             """, unsafe_allow_html=True)
-    
-    # =========================================================================
-    # TAB 5: ANALYTICS
-    # =========================================================================
-    with tab5:
-        st.markdown('<div class="section-header"><span class="section-icon">📊</span><span class="section-title">Session Analytics</span></div>', unsafe_allow_html=True)
-        
-        if st.session_state.history.get('tdi'):
-            tdi_vals = st.session_state.history['tdi']
-            zones = st.session_state.history['zones']
-            
-            # Export Section
-            st.markdown('<div class="section-header"><span class="section-icon">📥</span><span class="section-title">Export Analysis Data</span></div>', unsafe_allow_html=True)
-            
-            exp_col1, exp_col2, exp_col3 = st.columns([1, 1, 2])
-            
-            with exp_col1:
-                # Prepare CSV data
-                df = pd.DataFrame({
-                    'Frame': range(len(tdi_vals)),
-                    'TDI': tdi_vals,
-                    'Zone': zones,
-                    'Trend': st.session_state.history.get('trends', []),
-                    'Confidence': st.session_state.history.get('confidences', []),
-                })
-                csv_data = df.to_csv(index=False)
-                st.download_button(
-                    label="📥 Download CSV",
-                    data=csv_data,
-                    file_name=f"noise_floor_analysis_{st.session_state.session_id}.csv",
-                    mime="text/csv",
-                    use_container_width=True
-                )
-            
-            with exp_col2:
-                # Prepare JSON data
-                export_data = {
-                    'session_id': st.session_state.session_id,
-                    'timestamp': datetime.now().isoformat(),
-                    'data_mode': 'real_video' if use_real else 'synthetic',
-                    'frames_analyzed': len(tdi_vals),
-                    'drift_onset_frame': st.session_state.drift_onset_frame,
-                    'peak_tdi': float(max(tdi_vals)),
-                    'avg_tdi': float(np.mean(tdi_vals)),
-                    'history': {
-                        'tdi': [float(x) for x in tdi_vals],
-                        'zones': zones,
-                        'trends': st.session_state.history.get('trends', []),
-                    }
-                }
-                json_data = json.dumps(export_data, indent=2)
-                st.download_button(
-                    label="📥 Download JSON",
-                    data=json_data,
-                    file_name=f"noise_floor_analysis_{st.session_state.session_id}.json",
-                    mime="application/json",
-                    use_container_width=True
-                )
-            
-            with exp_col3:
-                st.markdown(f"""
-                <div style="background: rgba(34,197,94,0.1); border: 1px solid rgba(34,197,94,0.3); 
-                            border-radius: 8px; padding: 12px; font-size: 0.8rem;">
-                    <strong style="color: #22c55e;">📊 Report Ready</strong><br>
-                    <span style="color: #94a3b8;">Session: {st.session_state.session_id}<br>
-                    Frames: {len(tdi_vals)} | Peak TDI: {max(tdi_vals):.1f}</span>
-                </div>
-                """, unsafe_allow_html=True)
-            
-            st.markdown("<br>", unsafe_allow_html=True)
-            
-            # Stats Cards
-            col1, col2, col3, col4 = st.columns(4)
-            
-            with col1:
-                st.markdown(f"""
-                <div class="metric-card">
-                    <div class="metric-value normal">{np.mean(tdi_vals):.1f}</div>
-                    <div class="metric-label">Average TDI</div>
-                </div>
-                """, unsafe_allow_html=True)
-            
-            with col2:
-                st.markdown(f"""
-                <div class="metric-card">
-                    <div class="metric-value warning">{max(tdi_vals):.1f}</div>
-                    <div class="metric-label">Peak TDI</div>
-                </div>
-                """, unsafe_allow_html=True)
-            
-            with col3:
-                normal_pct = zones.count('NORMAL') / len(zones) * 100
-                st.markdown(f"""
-                <div class="metric-card">
-                    <div class="metric-value normal">{normal_pct:.0f}%</div>
-                    <div class="metric-label">Time in Normal</div>
-                </div>
-                """, unsafe_allow_html=True)
-            
-            with col4:
-                transitions = sum(1 for i in range(1, len(zones)) if zones[i] != zones[i-1])
-                st.markdown(f"""
-                <div class="metric-card">
-                    <div class="metric-value">{transitions}</div>
-                    <div class="metric-label">Zone Transitions</div>
-                </div>
-                """, unsafe_allow_html=True)
-            
-            # Zone distribution
-            st.markdown('<div class="section-header"><span class="section-icon">🥧</span><span class="section-title">Zone Distribution</span></div>', unsafe_allow_html=True)
-            
-            zone_counts = {z: zones.count(z) for z in ['NORMAL', 'WATCH', 'WARNING', 'CRITICAL']}
-            
-            fig = go.Figure(go.Pie(
-                labels=list(zone_counts.keys()),
-                values=list(zone_counts.values()),
-                marker_colors=['#22c55e', '#eab308', '#f97316', '#ef4444'],
-                hole=0.4,
-                textinfo='percent+label',
-                textfont=dict(color='white', size=12)
-            ))
-            
-            fig.update_layout(
-                height=300, margin=dict(l=20, r=20, t=20, b=20),
-                paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(10,13,18,0.5)',
-                font=dict(color='#94a3b8'),
-                showlegend=False
-            )
-            
-            st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False})
-        
-        else:
-            st.info("Run analysis to see analytics data.")
 
 
 if __name__ == "__main__":
     main()
+
+
