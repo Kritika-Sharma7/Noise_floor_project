@@ -56,4 +56,4 @@ data/*.npy
 .env
 .env.local
 UCSD_Anomaly_Dataset.v1p2
-
+Drone_vs_Bird
