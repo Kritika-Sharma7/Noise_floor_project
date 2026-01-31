@@ -1196,41 +1196,250 @@ def load_all_ucsd_frames():
 def load_ucsd_anomaly_frames_only():
     """Load ONLY anomaly frames - returns frames and their annotations."""
     return load_all_ucsd_frames()
+
+# ===== YOLOV8 DRONE/BIRD VIDEO DETECTION =====
+@st.cache_resource
+def load_yolo_model():
+    """Load YOLOv8 model for object detection."""
+    try:
+        from ultralytics import YOLO
+        # Use YOLOv8 nano for speed - detects 80 classes including 'bird'
+        model = YOLO('yolov8n.pt')
+        return model
+    except Exception as e:
+        st.warning(f"YOLOv8 not available: {e}")
+        return None
+
+@st.cache_data
+def load_drone_video_frames():
+    """Load frames from drone_test.mp4 video with detection.
+    Returns frames with annotations: BIRD (normal) vs DRONE (anomaly).
+    Uses video position heuristics since YOLOv8 doesn't have drone class.
+    """
+    video_path = Path(__file__).parent.parent / "data" / "videos" / "drone_test.mp4"
+    
+    if not video_path.exists():
+        return [], []
+    
+    frames = []
+    frame_info = []
+    
+    cap = cv2.VideoCapture(str(video_path))
+    if not cap.isOpened():
+        return [], []
+    
+    total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+    
+    # Load YOLOv8 for real detection
+    try:
+        from ultralytics import YOLO
+        model = YOLO('yolov8n.pt')  # Nano model for speed
+        has_yolo = True
+    except:
+        model = None
+        has_yolo = False
+    
+    # Skip frames for faster playback
+    frame_skip = 2
+    frame_idx = 0
+    read_idx = 0
+    consecutive_drone = 0  # Track consecutive drone detections
+    
+    while True:
+        ret, frame = cap.read()
+        if not ret:
+            break
+        
+        read_idx += 1
+        
+        # Skip frames for speed
+        if read_idx % frame_skip != 0:
+            continue
+        
+        # Resize for display
+        frame_resized = cv2.resize(frame, (320, 240))
+        
+        # Use YOLOv8 for actual detection
+        is_bird = False
+        is_drone = False
+        detected_class = "UNKNOWN"
+        
+        if has_yolo and model is not None:
+            # Run detection on original frame for better accuracy
+            results = model(frame, verbose=False, conf=0.25)
+            
+            bird_count = 0
+            other_flying = False
+            
+            for result in results:
+                for box in result.boxes:
+                    cls_id = int(box.cls[0])
+                    cls_name = model.names[cls_id]
+                    conf = float(box.conf[0])
+                    
+                    # Bird class in COCO = 14
+                    if cls_name == 'bird':
+                        bird_count += 1
+                    # Potential drone indicators: airplane, kite, or unidentified flying object
+                    elif cls_name in ['airplane', 'kite', 'frisbee', 'sports ball']:
+                        other_flying = True
+            
+            # Decision logic:
+            # - If birds detected (many small objects) = BIRD (normal)
+            # - If fewer/no birds + something else = DRONE (anomaly)
+            if bird_count >= 3:  # Multiple birds = flock = normal
+                is_bird = True
+                detected_class = "BIRD"
+            elif bird_count > 0 and not other_flying:
+                is_bird = True
+                detected_class = "BIRD"
+            elif other_flying or bird_count == 0:
+                # No birds or other flying object = potential drone
+                # But only trigger if we're past the first few frames
+                if frame_idx > 20:  # Give some buffer at start
+                    is_drone = True
+                    detected_class = "DRONE"
+                else:
+                    is_bird = True
+                    detected_class = "BIRD"
+            else:
+                is_bird = True
+                detected_class = "BIRD"
+        else:
+            # Fallback: assume first 70% bird, rest drone
+            progress = read_idx / total_frames
+            if progress < 0.70:
+                is_bird = True
+                detected_class = "BIRD"
+            else:
+                is_drone = True
+                detected_class = "DRONE"
+        
+        # Track consecutive drone detections for CRITICAL escalation
+        if is_drone:
+            consecutive_drone += 1
+        else:
+            consecutive_drone = 0
+        
+        # Determine severity: NORMAL (bird) -> WARNING (drone) -> CRITICAL (persistent drone)
+        if is_bird:
+            severity = 'NORMAL'
+            color = '#22c55e'
+            label = 'BIRD'
+        elif consecutive_drone >= 5:  # CRITICAL after 5 consecutive drone frames
+            severity = 'CRITICAL'
+            color = '#ef4444'
+            label = 'DRONE ALERT'
+        else:
+            severity = 'WARNING'
+            color = '#f97316'
+            label = 'DRONE'
+        
+        frames.append(frame_resized)
+        frame_info.append({
+            'frame_num': frame_idx + 1,
+            'detected_class': detected_class,
+            'is_anomaly': is_drone,
+            'is_bird': is_bird,
+            'confidence': 0.9,
+            'label': label,
+            'severity': severity,
+            'color': color,
+            'consecutive_drone': consecutive_drone
+        })
+        
+        frame_idx += 1
+    
+    cap.release()
+    return frames, frame_info
+
 def load_all_drone_bird_frames(category: str = "mixed"):
-    """Load Drone vs Bird frames for camera display.
+    """Load Drone vs Bird frames for camera display WITH annotations.
     
     Args:
         category: 'bird' (normal), 'drone' (anomaly), or 'mixed' (both)
+    
+    Returns:
+        Tuple of (frames, frame_annotations)
     """
     frames = []
+    frame_info = []
     dataset_path = Path(__file__).parent.parent / "data" / "Drone_vs_Bird"
     
     if not dataset_path.exists():
-        return frames
+        return frames, frame_info
     
-    categories = []
-    if category == "mixed":
-        categories = ["bird", "drone"]
-    else:
-        categories = [category]
+    # Load BIRD images first (NORMAL), then DRONE images (anomaly)
+    bird_path = dataset_path / "bird"
+    drone_path = dataset_path / "drone"
     
-    for cat in categories:
-        cat_path = dataset_path / cat
-        if cat_path.exists():
-            # Get image files
-            extensions = ['*.jpg', '*.jpeg', '*.png', '*.bmp']
-            files = []
-            for ext in extensions:
-                files.extend(cat_path.glob(ext))
-            files = sorted(files)[:150]  # Limit per category
+    # Load bird images (NORMAL state)
+    bird_files = []
+    if bird_path.exists():
+        extensions = ['*.jpg', '*.jpeg', '*.png', '*.bmp']
+        for ext in extensions:
+            bird_files.extend(bird_path.glob(ext))
+        bird_files = sorted(bird_files)[:30]  # Only 30 bird images for fast video
+    
+    # Load drone images (ANOMALY state)
+    drone_files = []
+    if drone_path.exists():
+        extensions = ['*.jpg', '*.jpeg', '*.png', '*.bmp']
+        for ext in extensions:
+            drone_files.extend(drone_path.glob(ext))
+        drone_files = sorted(drone_files)[:30]  # Only 30 drone images for fast video
+    
+    frame_idx = 0
+    consecutive_drone = 0
+    
+    # First add bird images (NORMAL)
+    for img_file in bird_files:
+        frame = cv2.imread(str(img_file))
+        if frame is not None:
+            frame = cv2.resize(frame, (320, 240))
+            frames.append(frame)
+            consecutive_drone = 0  # Reset drone counter
+            frame_info.append({
+                'frame_num': frame_idx + 1,
+                'detected_class': 'BIRD',
+                'is_anomaly': False,
+                'is_bird': True,
+                'label': 'BIRD',
+                'severity': 'NORMAL',
+                'color': '#22c55e',
+                'consecutive_drone': 0
+            })
+            frame_idx += 1
+    
+    # Then add drone images (WARNING → CRITICAL)
+    for img_file in drone_files:
+        frame = cv2.imread(str(img_file))
+        if frame is not None:
+            frame = cv2.resize(frame, (320, 240))
+            frames.append(frame)
+            consecutive_drone += 1
             
-            for img_file in files:
-                frame = cv2.imread(str(img_file), cv2.IMREAD_GRAYSCALE)
-                if frame is not None:
-                    frame = cv2.resize(frame, (320, 240))
-                    frames.append(frame)
+            # Determine severity based on persistence
+            if consecutive_drone >= 5:  # CRITICAL after 5 consecutive drone frames
+                severity = 'CRITICAL'
+                color = '#ef4444'
+            else:
+                severity = 'WARNING'
+                color = '#f97316'
+            
+            frame_info.append({
+                'frame_num': frame_idx + 1,
+                'detected_class': 'DRONE',
+                'is_anomaly': True,
+                'is_bird': False,
+                'label': 'DRONE',
+                'severity': severity,
+                'color': color,
+                'consecutive_drone': consecutive_drone
+            })
+            frame_idx += 1
     
-    return frames
+    return frames, frame_info
 def create_detection_video(dataset_type: str = "ucsd"):
     """Create a video file with detection overlays for playback.
     
@@ -1743,9 +1952,14 @@ def run_simulation(lstm_vae, drift_engine, zone_classifier, attributor, baseline
     
     # Fallback to synthetic
     if all_data is None or len(all_data) < 50:
+        # Use drift_start frames of normal data, then remaining frames with drift applied
+        # Total frames = 300, so drift_frames = 300 - drift_start
+        drift_frames = max(100, 300 - drift_start)  # At least 100 drift frames
         normal_data = create_synthetic_normal_data(drift_start, n_features)
-        drift_data = create_synthetic_drift_data(200, n_features, drift_rate)
+        drift_data = create_synthetic_drift_data(drift_frames, n_features, drift_rate)
         all_data = np.vstack([normal_data, drift_data])
+        # Store actual drift start for visualization
+        actual_drift_start = drift_start
     
     # Process
     results = []
@@ -1773,7 +1987,7 @@ def run_simulation(lstm_vae, drift_engine, zone_classifier, attributor, baseline
         # Log incidents for WARNING and CRITICAL zones
         if result['zone_name'] in ['WARNING', 'CRITICAL']:
             incident = {
-                'id': f"INC-{hashlib.md5(f'{i}-{result["tdi"]}'.encode()).hexdigest()[:8].upper()}",
+                'id': f"INC-{hashlib.md5(f'{i}-{result['tdi']}'.encode()).hexdigest()[:8].upper()}",
                 'frame': i,
                 'tdi': result['tdi'],
                 'zone': result['zone_name'],
@@ -1788,8 +2002,8 @@ def run_simulation(lstm_vae, drift_engine, zone_classifier, attributor, baseline
 # =============================================================================
 # VISUALIZATION
 # =============================================================================
-def create_tdi_timeline(history, drift_start):
-    """Create TDI timeline chart."""
+def create_tdi_timeline(history, drift_start, watch_th=25, warning_th=50, critical_th=75):
+    """Create TDI timeline chart with configurable thresholds."""
     fig = make_subplots(rows=2, cols=1, row_heights=[0.85, 0.15], shared_xaxes=True, vertical_spacing=0.02)
     
     if not history['tdi']:
@@ -1799,9 +2013,9 @@ def create_tdi_timeline(history, drift_start):
     frames = list(range(len(history['tdi'])))
     tdi = history['tdi']
     
-    # Zone bands
-    for y0, y1, color in [(0, 25, 'rgba(34,197,94,0.1)'), (25, 50, 'rgba(234,179,8,0.1)'), 
-                          (50, 75, 'rgba(249,115,22,0.1)'), (75, 100, 'rgba(239,68,68,0.1)')]:
+    # Zone bands - use passed thresholds
+    for y0, y1, color in [(0, watch_th, 'rgba(34,197,94,0.1)'), (watch_th, warning_th, 'rgba(234,179,8,0.1)'), 
+                          (warning_th, critical_th, 'rgba(249,115,22,0.1)'), (critical_th, 100, 'rgba(239,68,68,0.1)')]:
         fig.add_hrect(y0=y0, y1=y1, fillcolor=color, line_width=0, row=1, col=1)
     
     # TDI line
@@ -1812,8 +2026,8 @@ def create_tdi_timeline(history, drift_start):
         hovertemplate='Frame %{x}<br>TDI: %{y:.1f}<extra></extra>'
     ), row=1, col=1)
     
-    # Thresholds
-    for thresh, color in [(25, '#22c55e'), (50, '#eab308'), (75, '#f97316')]:
+    # Thresholds - use passed values
+    for thresh, color in [(watch_th, '#22c55e'), (warning_th, '#eab308'), (critical_th, '#f97316')]:
         fig.add_hline(y=thresh, line_dash="dot", line_color=color, opacity=0.3, row=1, col=1)
     
     # Drift marker
@@ -1852,16 +2066,26 @@ def main():
         st.markdown('<div class="sidebar-section"><div class="sidebar-title"> Data Source</div></div>', unsafe_allow_html=True)
         data_mode = st.radio(
             "Select Mode",
-            ["synthetic", "ucsd_video", "drone_bird"],
+            ["synthetic", "ucsd_video", "drone_bird", "drone_video"],
             format_func=lambda x: {
                 "synthetic": " Synthetic Data",
                 "ucsd_video": "UCSD Pedestrian",
-                "drone_bird": "Drone vs Bird"
+                "drone_bird": "Drone vs Bird (Images)",
+                "drone_video": "Drone Video"
             }.get(x, x),
             key="data_mode_select"
         )
         
-        if data_mode == "ucsd_video":
+        if data_mode == "drone_video":
+            st.markdown("""
+            <div style="background: rgba(239,68,68,0.1); border: 1px solid rgba(239,68,68,0.3); 
+                        border-radius: 8px; padding: 10px; font-size: 0.75rem; margin: 10px 0;">
+                <strong style="color: #ef4444;">Drone Detection Video</strong><br>
+                <span style="color: #94a3b8;">Bird vs Drone Detection<br>
+                NORMAL → WARNING → CRITICAL</span>
+            </div>
+            """, unsafe_allow_html=True)
+        elif data_mode == "ucsd_video":
             st.markdown("""
             <div style="background: rgba(6,182,212,0.1); border: 1px solid rgba(6,182,212,0.3); 
                         border-radius: 8px; padding: 10px; font-size: 0.75rem; margin: 10px 0;">
@@ -1882,20 +2106,29 @@ def main():
             </div>
             """, unsafe_allow_html=True)
         
-        st.markdown("---")
-        
-        # Parameters
-        st.markdown('<div class="sidebar-section"><div class="sidebar-title"> Parameters</div></div>', unsafe_allow_html=True)
-        drift_start = st.slider("Drift Onset Frame", 50, 200, 100, help="When drift begins")
-        drift_rate = st.slider("Drift Intensity", 0.01, 0.05, 0.02, 0.005)
-        
-        st.markdown("---")
-        
-        # Zone Thresholds
-        st.markdown('<div class="sidebar-section"><div class="sidebar-title"> Zone Thresholds</div></div>', unsafe_allow_html=True)
-        watch_thresh = st.slider("Watch", 15, 35, 25)
-        warning_thresh = st.slider("Warning", 35, 60, 50)
-        critical_thresh = st.slider("Critical", 55, 85, 75)
+        # Only show Parameters and Zone Thresholds for SYNTHETIC data mode
+        if data_mode == "synthetic":
+            st.markdown("---")
+            
+            # Parameters - ONLY for synthetic data
+            st.markdown('<div class="sidebar-section"><div class="sidebar-title"> Parameters</div></div>', unsafe_allow_html=True)
+            drift_start = st.slider("Drift Onset Frame", 50, 200, 100, help="When drift begins in synthetic data")
+            drift_rate = st.slider("Drift Intensity", 0.01, 0.05, 0.02, 0.005, help="How fast anomaly develops")
+            
+            st.markdown("---")
+            
+            # Zone Thresholds - ONLY for synthetic data
+            st.markdown('<div class="sidebar-section"><div class="sidebar-title"> Zone Thresholds</div></div>', unsafe_allow_html=True)
+            watch_thresh = st.slider("Watch", 15, 35, 25)
+            warning_thresh = st.slider("Warning", 35, 60, 50)
+            critical_thresh = st.slider("Critical", 55, 85, 75)
+        else:
+            # Default values for non-synthetic modes
+            drift_start = 100
+            drift_rate = 0.02
+            watch_thresh = 25
+            warning_thresh = 50
+            critical_thresh = 75
         
         st.markdown("---")
         
@@ -1952,6 +2185,13 @@ def main():
      feature_extractor, train_data, ensemble_detector, anomaly_classifier, 
      confidence_calibrator, incident_logger, feature_names) = initialize_system(use_real, use_drone_bird)
     
+    # Update zone classifier with user-defined thresholds from sliders
+    zone_classifier.tdi_thresholds = {
+        'normal': watch_thresh,
+        'watch': warning_thresh,
+        'warning': critical_thresh,
+    }
+    
     # Tabs - Consolidated to 4 main views
     tab1, tab2, tab3, tab4 = st.tabs([" Intelligence Dashboard", " AI Ensemble", " Camera Grid", " Incident Log & Export"])
     
@@ -1966,10 +2206,10 @@ def main():
             trend = st.session_state.history['trends'][idx]
             confidence = st.session_state.history['confidences'][idx]
             
-            # TDI class
-            if tdi < 25: tdi_class = 'normal'
-            elif tdi < 50: tdi_class = 'watch'
-            elif tdi < 75: tdi_class = 'warning'
+            # TDI class - use slider thresholds
+            if tdi < watch_thresh: tdi_class = 'normal'
+            elif tdi < warning_thresh: tdi_class = 'watch'
+            elif tdi < critical_thresh: tdi_class = 'warning'
             else: tdi_class = 'critical'
             
             # Zone info
@@ -2024,59 +2264,50 @@ def main():
                 </div>
                 """, unsafe_allow_html=True)
             
+            # Show active parameters for synthetic mode
+            if data_mode == "synthetic":
+                st.markdown(f"""
+                <div style="background: rgba(6,182,212,0.05); border: 1px solid rgba(6,182,212,0.2); 
+                            border-radius: 8px; padding: 8px 16px; margin: 10px 0; display: flex; gap: 20px; font-size: 0.75rem;">
+                    <span style="color: #94a3b8;"><strong style="color: #06b6d4;">Active Parameters:</strong></span>
+                    <span style="color: #94a3b8;">Drift Onset: <strong style="color: #f97316;">Frame {drift_start}</strong></span>
+                    <span style="color: #94a3b8;">Drift Rate: <strong style="color: #eab308;">{drift_rate:.3f}</strong></span>
+                    <span style="color: #94a3b8;">Thresholds: <strong style="color: #22c55e;">{watch_thresh}</strong> / <strong style="color: #eab308;">{warning_thresh}</strong> / <strong style="color: #ef4444;">{critical_thresh}</strong></span>
+                </div>
+                """, unsafe_allow_html=True)
+            
             # ROW 2: Timeline
             st.markdown('<div class="section-header"><span class="section-icon"></span><span class="section-title">Threat Deviation Timeline</span></div>', unsafe_allow_html=True)
             st.markdown('<div class="chart-container">', unsafe_allow_html=True)
-            fig = create_tdi_timeline(st.session_state.history, st.session_state.get('actual_drift_start', drift_start))
+            fig = create_tdi_timeline(st.session_state.history, st.session_state.get('actual_drift_start', drift_start), watch_thresh, warning_thresh, critical_thresh)
             st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False})
             st.markdown('</div>', unsafe_allow_html=True)
             
-            # ROW 3: Attribution & Explanation
-            col_attr, col_exp = st.columns([1, 1])
+            # ROW 3: AI Explanation for the graph
+            explanation = st.session_state.history['explanations'][idx] if st.session_state.history.get('explanations') else ""
+            onset = st.session_state.drift_onset_frame
+            actual_drift = st.session_state.get('actual_drift_start', drift_start)
             
-            with col_attr:
-                st.markdown('<div class="section-header"><span class="section-icon"></span><span class="section-title">Feature Attribution</span></div>', unsafe_allow_html=True)
-                
-                if st.session_state.history.get('top_features') and st.session_state.history['top_features'][idx]:
-                    for feat in st.session_state.history['top_features'][idx][:5]:
-                        score = abs(feat['score'])
-                        width = min(score * 25, 100)
-                        color = '#22c55e' if score < 2 else '#eab308' if score < 3 else '#ef4444'
-                        st.markdown(f"""
-                        <div class="feature-item">
-                            <div class="feature-header">
-                                <span class="feature-name">{feat['name']}</span>
-                                <span class="feature-score" style="color: {color};">z={feat['score']:.2f}</span>
-                            </div>
-                            <div class="feature-bar-bg">
-                                <div class="feature-bar" style="width: {width}%; background: {color};"></div>
-                            </div>
-                        </div>
-                        """, unsafe_allow_html=True)
+            # Generate graph explanation based on actual data
+            peak_tdi = max(st.session_state.history['tdi'])
+            current_zone = zone
+            frames_analyzed = len(st.session_state.history['tdi'])
             
-            with col_exp:
-                st.markdown('<div class="section-header"><span class="section-icon"></span><span class="section-title">AI Explanation</span></div>', unsafe_allow_html=True)
-                
-                explanation = st.session_state.history['explanations'][idx] if st.session_state.history.get('explanations') else ""
-                st.markdown(f"""
-                <div class="explanation-card">
-                    <div class="explanation-header">
-                        <span></span>
-                        <span class="explanation-title">System Analysis</span>
-                    </div>
-                    <div class="explanation-text">{explanation if explanation else "Analyzing behavioral patterns..."}</div>
+            if onset:
+                detection_delay = onset - actual_drift
+                graph_explanation = f"The timeline shows TDI evolution across {frames_analyzed} frames. Drift was injected at frame {actual_drift} and first detected at frame {onset} ({detection_delay} frame delay). Peak TDI reached {peak_tdi:.1f}. Current status: {current_zone}."
+            else:
+                graph_explanation = f"The timeline shows TDI evolution across {frames_analyzed} frames. Drift injection point is at frame {actual_drift}. Peak TDI: {peak_tdi:.1f}. Current status: {current_zone}."
+            
+            st.markdown(f"""
+            <div class="explanation-card" style="margin: 16px 0;">
+                <div class="explanation-header">
+                    <span></span>
+                    <span class="explanation-title">Graph Analysis</span>
                 </div>
-                """, unsafe_allow_html=True)
-                
-                # Drift onset
-                onset = st.session_state.drift_onset_frame
-                if onset:
-                    st.markdown(f"""
-                    <div class="onset-card" style="margin-top: 16px;">
-                        <div class="onset-label">Drift First Detected</div>
-                        <div class="onset-value">Frame {onset}</div>
-                    </div>
-                    """, unsafe_allow_html=True)
+                <div class="explanation-text">{graph_explanation}</div>
+            </div>
+            """, unsafe_allow_html=True)
             
             # ROW 4: Performance Metrics
             st.markdown('<div class="section-header"><span class="section-icon"></span><span class="section-title">Detection Performance</span></div>', unsafe_allow_html=True)
@@ -2097,11 +2328,60 @@ def main():
             m3.metric("Peak TDI", f"{max(tdi_vals):.1f}")
             m4.metric("Frames Analyzed", len(tdi_vals))
             
-            # Reset
-            if st.button(" Reset Session"):
-                st.session_state.history = {k: [] for k in st.session_state.history}
-                st.session_state.drift_onset_frame = None
-                st.rerun()
+            # Check if parameters changed (for synthetic mode)
+            params_changed = False
+            if data_mode == "synthetic":
+                stored_drift_start = st.session_state.get('actual_drift_start', None)
+                if stored_drift_start is not None and stored_drift_start != drift_start:
+                    params_changed = True
+            
+            # Reset / Re-run buttons
+            col_reset, col_rerun = st.columns(2)
+            with col_reset:
+                if st.button(" Reset Session"):
+                    st.session_state.history = {k: [] for k in st.session_state.history}
+                    st.session_state.drift_onset_frame = None
+                    st.session_state.actual_drift_start = None
+                    st.rerun()
+            
+            with col_rerun:
+                if params_changed:
+                    st.markdown(f"""
+                    <div style="background: rgba(249,115,22,0.1); border: 1px solid rgba(249,115,22,0.3); 
+                                border-radius: 8px; padding: 8px; font-size: 0.75rem; margin-bottom: 8px; text-align: center;">
+                        <span style="color: #f97316;">⚠️ Parameters changed! Re-run to apply.</span>
+                    </div>
+                    """, unsafe_allow_html=True)
+                
+                if st.button(" Re-run Analysis" if params_changed else " Run Again", type="primary" if params_changed else "secondary"):
+                    st.session_state.history = {k: [] for k in st.session_state.history}
+                    st.session_state.drift_onset_frame = None
+                    with st.spinner(" DRISHTI analyzing with new parameters..."):
+                        results, drift_onset, actual_drift, incidents = run_simulation(
+                            lstm_vae, drift_engine, zone_classifier, attributor,
+                            baseline_means, baseline_stds, drift_start, drift_rate,
+                            use_real, feature_extractor, ensemble_detector,
+                            anomaly_classifier, confidence_calibrator, use_drone_bird
+                        )
+                        
+                        st.session_state.history = {
+                            'tdi': [r['tdi'] for r in results],
+                            'zones': [r['zone_name'] for r in results],
+                            'trends': [r['trend_name'] for r in results],
+                            'confidences': [r['confidence'] for r in results],
+                            'timestamps': [r['frame'] for r in results],
+                            'features': [r['raw_features'] for r in results],
+                            'top_features': [r['top_features'] for r in results],
+                            'explanations': [r['explanation'] for r in results],
+                            'ensemble_scores': [r.get('ensemble_scores', {}) for r in results],
+                            'anomaly_categories': [r.get('anomaly_category', 'normal') for r in results],
+                            'latent_means': [r.get('latent_mean', np.zeros(8)) for r in results],
+                            'forecasts': [r.get('tdi_forecast', 0) for r in results],
+                        }
+                        st.session_state.drift_onset_frame = drift_onset
+                        st.session_state.actual_drift_start = actual_drift
+                        st.session_state.incidents = incidents
+                    st.rerun()
         
         else:
             # Start screen
@@ -2224,53 +2504,6 @@ def main():
                 </div>
                 </div>
                 """, unsafe_allow_html=True)
-                
-                # Anomaly Classification
-                st.markdown('<div class="section-header"><span class="section-icon"></span><span class="section-title">Anomaly Classification</span></div>', unsafe_allow_html=True)
-                
-                categories = st.session_state.history.get('anomaly_categories', ['normal'])
-                latest_category = categories[-1] if categories else 'normal'
-                
-                category_icons = {
-                    'normal': '', 'loitering': '', 'intrusion': '', 
-                    'crowd_formation': '', 'erratic_movement': '',
-                    'coordinated': '', 'speed_anomaly': '', 
-                    'direction_anomaly': '', 'unknown': ''
-                }
-                
-                category_colors = {
-                    'normal': '#22c55e', 'loitering': '#eab308', 'intrusion': '#ef4444',
-                    'crowd_formation': '#f97316', 'erratic_movement': '#8b5cf6',
-                    'coordinated': '#ef4444', 'speed_anomaly': '#06b6d4',
-                    'direction_anomaly': '#ec4899', 'unknown': '#64748b'
-                }
-                
-                st.markdown(f"""
-                <div class="classification-badge" style="border-color: {category_colors.get(latest_category, '#64748b')}30; color: {category_colors.get(latest_category, '#64748b')};">
-                    <span>{category_icons.get(latest_category, '')}</span>
-                    <span>{latest_category.replace('_', ' ').title()}</span>
-                </div>
-                """, unsafe_allow_html=True)
-                
-                # Category distribution
-                if categories:
-                    cat_counts = {}
-                    for c in categories:
-                        cat_counts[c] = cat_counts.get(c, 0) + 1
-                    
-                    sorted_cats = sorted(cat_counts.items(), key=lambda x: x[1], reverse=True)[:5]
-                    
-                    st.markdown("<br>", unsafe_allow_html=True)
-                    for cat, count in sorted_cats:
-                        pct = count / len(categories) * 100
-                        color = category_colors.get(cat, '#64748b')
-                        st.markdown(f"""
-                        <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">
-                            <span style="font-size: 0.8rem;">{category_icons.get(cat, '')}</span>
-                            <span style="font-size: 0.75rem; color: #94a3b8; flex: 1;">{cat.replace('_', ' ').title()}</span>
-                            <span style="font-size: 0.75rem; color: {color}; font-weight: 600;">{pct:.0f}%</span>
-                        </div>
-                        """, unsafe_allow_html=True)
             
             with col_lat:
                 # 3D Latent Space Visualization
@@ -2376,34 +2609,6 @@ def main():
                         st.info("Insufficient latent dimensions for 3D visualization")
                 else:
                     st.info("Run analysis to see latent space trajectory")
-                
-                # TDI Forecast
-                st.markdown('<div class="section-header"><span class="section-icon"></span><span class="section-title">TDI Forecast</span></div>', unsafe_allow_html=True)
-                
-                forecasts = st.session_state.history.get('forecasts', [])
-                if forecasts:
-                    latest_forecast = forecasts[-1]
-                    current_tdi = st.session_state.history['tdi'][-1]
-                    
-                    forecast_trend = '' if latest_forecast > current_tdi else '' if latest_forecast < current_tdi else ''
-                    forecast_color = '#ef4444' if latest_forecast > 50 else '#eab308' if latest_forecast > 25 else '#22c55e'
-                    
-                    st.markdown(f"""
-                    <div class="forecast-panel">
-                        <div style="display: flex; justify-content: space-between; align-items: center;">
-                            <div>
-                                <div class="forecast-label">Predicted Next TDI</div>
-                                <div class="forecast-value" style="color: {forecast_color};">{latest_forecast:.1f} {forecast_trend}</div>
-                            </div>
-                            <div style="text-align: right;">
-                                <div class="forecast-label">Current</div>
-                                <div style="font-size: 1.5rem; color: #94a3b8;">{current_tdi:.1f}</div>
-                            </div>
-                        </div>
-                    </div>
-                    """, unsafe_allow_html=True)
-                else:
-                    st.info("Run analysis to see TDI forecast")
         
         else:
             st.info(" Run analysis from the Intelligence Dashboard tab to see ensemble detection results")
@@ -2418,10 +2623,19 @@ def main():
         if 'current_frame_idx' not in st.session_state:
             st.session_state.current_frame_idx = 0
         
+        # Check if using drone video mode
+        use_drone_video = data_mode == "drone_video"
+        
         # Load frames based on selected mode
-        if use_drone_bird:
-            all_frames = load_all_drone_bird_frames("mixed")
-            frame_annotations = None
+        if use_drone_video:
+            # Load drone video with YOLOv8 detection
+            all_frames, frame_annotations = load_drone_video_frames()
+            dataset_name = "Drone Detection Video"
+            normal_label = "BIRD"
+            anomaly_label = "DRONE"
+        elif use_drone_bird:
+            # Load drone vs bird images WITH annotations (BIRD=normal, DRONE=anomaly)
+            all_frames, frame_annotations = load_all_drone_bird_frames("mixed")
             dataset_name = "Drone vs Bird"
             normal_label = "BIRD"
             anomaly_label = "DRONE"
@@ -2444,39 +2658,52 @@ def main():
             # Get current frame index
             current_frame = st.session_state.current_frame_idx
             
-            # For UCSD, we have ground truth annotations - use them directly
+            # For UCSD or Drone Video, we have ground truth annotations - use them directly
             if frame_annotations and current_frame < len(frame_annotations):
                 # Use ground truth labels directly
                 ann = frame_annotations[current_frame]
                 is_anomaly = ann.get('is_anomaly', False)
-                anomaly_type = ann['anomaly_type']
+                # Handle both UCSD format (anomaly_type) and drone video format (detected_class)
+                anomaly_type = ann.get('anomaly_type', ann.get('detected_class', None))
                 detect_label = ann['label']
-                test_folder = ann['test']
+                test_folder = ann.get('test', f"Frame {ann.get('frame_num', current_frame+1)}")
                 
-                # Track consecutive anomaly frames for CRITICAL escalation
-                if 'consecutive_anomaly_count' not in st.session_state:
-                    st.session_state.consecutive_anomaly_count = 0
-                
-                if is_anomaly:
-                    st.session_state.consecutive_anomaly_count += 1
+                # For drone video, use pre-computed severity from YOLOv8
+                if use_drone_video:
+                    detection_state = ann['severity']
+                    state_color = ann['color']
+                    # Set TDI based on state
+                    if detection_state == 'NORMAL':
+                        tdi_base = 8.0
+                    elif detection_state == 'WARNING':
+                        tdi_base = 70.0
+                    else:  # CRITICAL
+                        tdi_base = 95.0
                 else:
-                    st.session_state.consecutive_anomaly_count = 0
-                
-                # Determine state based on anomaly and persistence
-                if not is_anomaly:
-                    detection_state = 'NORMAL'
-                    state_color = '#22c55e'
-                    tdi_base = 8.0 + (current_frame % 5)  # Low TDI for normal
-                elif st.session_state.consecutive_anomaly_count >= CRITICAL_PERSISTENCE_THRESHOLD:
-                    detection_state = 'CRITICAL'
-                    state_color = '#ef4444'  # Red for critical
-                    tdi_base = 95.0  # High TDI for critical
-                else:
-                    detection_state = 'WARNING'
-                    state_color = '#f97316'  # Orange for warning
-                    tdi_base = 70.0
+                    # UCSD: Track consecutive anomaly frames for CRITICAL escalation
+                    if 'consecutive_anomaly_count' not in st.session_state:
+                        st.session_state.consecutive_anomaly_count = 0
+                    
+                    if is_anomaly:
+                        st.session_state.consecutive_anomaly_count += 1
+                    else:
+                        st.session_state.consecutive_anomaly_count = 0
+                    
+                    # Determine state based on anomaly and persistence
+                    if not is_anomaly:
+                        detection_state = 'NORMAL'
+                        state_color = '#22c55e'
+                        tdi_base = 8.0 + (current_frame % 5)  # Low TDI for normal
+                    elif st.session_state.consecutive_anomaly_count >= CRITICAL_PERSISTENCE_THRESHOLD:
+                        detection_state = 'CRITICAL'
+                        state_color = '#ef4444'  # Red for critical
+                        tdi_base = 95.0  # High TDI for critical
+                    else:
+                        detection_state = 'WARNING'
+                        state_color = '#f97316'  # Orange for warning
+                        tdi_base = 70.0
             else:
-                # Fallback for drone/bird or missing annotations
+                # Fallback for drone/bird images or missing annotations
                 detection_state = "NORMAL"
                 state_color = "#22c55e"
                 tdi_base = 10.0
@@ -2644,19 +2871,30 @@ def main():
                     if frame_annotations and cam_frame_idx < len(frame_annotations):
                         ann = frame_annotations[cam_frame_idx]
                         cam_is_anomaly = ann.get('is_anomaly', False)
-                        cam_anomaly_type = ann['anomaly_type']
+                        # Handle both UCSD format (anomaly_type) and drone video format (detected_class)
+                        cam_anomaly_type = ann.get('anomaly_type', ann.get('detected_class', None))
                         cam_label = ann['label']
                         
-                        # Use the same state as main view (based on consecutive anomaly count)
-                        if not cam_is_anomaly:
-                            cam_state = 'NORMAL'
-                            cam_tdi = 8.0
-                        elif st.session_state.get('consecutive_anomaly_count', 0) >= CRITICAL_PERSISTENCE_THRESHOLD:
-                            cam_state = 'CRITICAL'
-                            cam_tdi = 95.0
+                        # For drone video, use pre-computed severity
+                        if use_drone_video:
+                            cam_state = ann['severity']
+                            if cam_state == 'NORMAL':
+                                cam_tdi = 8.0
+                            elif cam_state == 'WARNING':
+                                cam_tdi = 70.0
+                            else:  # CRITICAL
+                                cam_tdi = 95.0
                         else:
-                            cam_state = 'WARNING'
-                            cam_tdi = 70.0
+                            # UCSD: Use the same state as main view (based on consecutive anomaly count)
+                            if not cam_is_anomaly:
+                                cam_state = 'NORMAL'
+                                cam_tdi = 8.0
+                            elif st.session_state.get('consecutive_anomaly_count', 0) >= CRITICAL_PERSISTENCE_THRESHOLD:
+                                cam_state = 'CRITICAL'
+                                cam_tdi = 95.0
+                            else:
+                                cam_state = 'WARNING'
+                                cam_tdi = 70.0
                     else:
                         cam_state = "NORMAL"
                         cam_tdi = 10.0
@@ -2776,7 +3014,11 @@ def main():
             
             # AUTO-ADVANCE FRAMES WHEN PLAYING (at the very end of tab3)
             if st.session_state.is_playing:
-                time.sleep(0.03)  # 30ms = ~33 FPS - FAST playback
+                # ULTRA FAST playback for drone_bird mode (5ms = 200 FPS)
+                if use_drone_bird or use_drone_video:
+                    time.sleep(0.005)  # 5ms = ~200 FPS - ULTRA FAST
+                else:
+                    time.sleep(0.03)  # 30ms = ~33 FPS for UCSD
                 st.session_state.current_frame_idx = (st.session_state.current_frame_idx + 1) % total_frames
                 st.rerun()
             
