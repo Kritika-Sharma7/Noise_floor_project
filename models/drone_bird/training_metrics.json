@@ -1,0 +1,58 @@
+{
+  "LSTM-VAE": {
+    "model_name": "LSTM-VAE",
+    "training_samples": 240,
+    "normal_samples": 240,
+    "anomaly_samples": 0,
+    "train_time_seconds": 12.609253406524658,
+    "validation_accuracy": 0.0,
+    "validation_precision": 0.0,
+    "validation_recall": 0.0,
+    "validation_f1": 0.0,
+    "false_positive_rate": 0.0,
+    "false_negative_rate": 0.0,
+    "timestamp": "2026-01-31T16:49:04.040426"
+  },
+  "IsolationForest": {
+    "model_name": "IsolationForest",
+    "training_samples": 2400,
+    "normal_samples": 2400,
+    "anomaly_samples": 0,
+    "train_time_seconds": 0.8134934902191162,
+    "validation_accuracy": 0.5770370370327628,
+    "validation_precision": 0.8623481781027389,
+    "validation_recall": 0.28399999999621334,
+    "validation_f1": 0.4272818418007081,
+    "false_positive_rate": 0.056666666665722225,
+    "false_negative_rate": 0.7159999999904533,
+    "timestamp": "2026-01-31T16:49:04.854086"
+  },
+  "OneClassSVM": {
+    "model_name": "OneClassSVM",
+    "training_samples": 2400,
+    "normal_samples": 2400,
+    "anomaly_samples": 0,
+    "train_time_seconds": 0.0007784366607666016,
+    "validation_accuracy": 0.5881481481437916,
+    "validation_precision": 0.904166666628993,
+    "validation_recall": 0.28933333332947553,
+    "validation_f1": 0.4383838347018876,
+    "false_positive_rate": 0.038333333332694446,
+    "false_negative_rate": 0.7106666666571911,
+    "timestamp": "2026-01-31T16:49:04.855122"
+  },
+  "LOF": {
+    "model_name": "LOF",
+    "training_samples": 2400,
+    "normal_samples": 2400,
+    "anomaly_samples": 0,
+    "train_time_seconds": 0.23757171630859375,
+    "validation_accuracy": 0.5948148148104089,
+    "validation_precision": 0.910931174052189,
+    "validation_recall": 0.299999999996,
+    "validation_f1": 0.451354058450175,
+    "false_positive_rate": 0.03666666666605556,
+    "false_negative_rate": 0.6999999999906666,
+    "timestamp": "2026-01-31T16:49:05.092840"
+  }
+}
